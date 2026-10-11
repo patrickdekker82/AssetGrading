@@ -5,7 +5,7 @@ Attribution is required ("Data van CoinGecko"), see the Bronnen page.
 
 from datetime import UTC, date, datetime, timedelta
 
-from app.providers.base import Bar, Fact, Provider, to_decimal
+from app.providers.base import Bar, Fact, Provider, ProviderError, to_decimal
 
 DEMO_HISTORY_DAYS = 365
 
@@ -26,11 +26,28 @@ class CoinGeckoProvider(Provider):
     def auth_headers(self) -> dict[str, str]:
         return {"x-cg-demo-api-key": self.api_key} if self.api_key else {}
 
-    def markets(self, *, per_page: int = 250, page: int = 1, category: str | None = None):
+    def markets(self, *, per_page: int = 250, page: int = 1, category: str | None = None, ids: str | None = None):
         params = {"vs_currency": "eur", "order": "market_cap_desc", "per_page": per_page, "page": page}
         if category:
             params["category"] = category
+        if ids:
+            params["ids"] = ids
         return self.get_json("/coins/markets", params)
+
+    def search(self, query: str) -> list[dict]:
+        """Coins matching a name or ticker: [{id, name, symbol, market_cap_rank}]."""
+        res = self.get_json("/search", {"query": query})
+        return [{k: c.get(k) for k in ("id", "name", "symbol", "market_cap_rank")} for c in res.data.get("coins", [])]
+
+    def by_contract(self, platform: str, address: str) -> dict | None:
+        """The coin for a contract address on a platform, or None when CoinGecko does not know it."""
+        try:
+            res = self.get_json(f"/coins/{platform}/contract/{address}")
+        except ProviderError as exc:
+            if exc.not_found:
+                return None
+            raise
+        return {"id": res.data.get("id"), "name": res.data.get("name"), "symbol": res.data.get("symbol")}
 
     def coin_detail(self, coin_id: str):
         return self.get_json(

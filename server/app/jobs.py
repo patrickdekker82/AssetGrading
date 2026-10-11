@@ -53,6 +53,9 @@ def run_crypto_and_grade(c: JobContext) -> Report:
         return report
     for key, value in graded.counts.items():
         report.add(key, value)
+    from app.api.assets import clear_chart_cache
+
+    clear_chart_cache()
     report.errors += graded.errors
     return report
 

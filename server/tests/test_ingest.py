@@ -72,7 +72,19 @@ def fake_world(request: httpx.Request) -> httpx.Response:
                 return httpx.Response(200, json=[MARKETS[2]])
             if category:
                 return httpx.Response(200, json=[])
+            if q.get("ids"):
+                extra = {"newcoin": {"id": "newcoin", "symbol": "new", "name": "Newcoin", "current_price": 3.0,
+                                     "market_cap": 300, "market_cap_rank": 900}}
+                hit = [m for m in MARKETS if m["id"] == q["ids"]] or ([extra[q["ids"]]] if q["ids"] in extra else [])
+                return httpx.Response(200, json=hit)
             return httpx.Response(200, json=MARKETS)
+        if path.endswith("/search"):
+            return httpx.Response(200, json={"coins": [
+                {"id": "newcoin", "name": "Newcoin", "symbol": "new", "market_cap_rank": 900}]})
+        if "/contract/" in path:
+            if path.endswith("0x" + "a" * 40) and "/ethereum/" in path:
+                return httpx.Response(200, json={"id": "newcoin", "name": "Newcoin", "symbol": "new"})
+            return httpx.Response(404, json={"error": "coin not found"})
         if path.endswith("/market_chart"):
             n = int(q["days"])
             points = [[ms(TODAY - timedelta(days=i)), 2.0] for i in range(n - 1, -1, -1)]

@@ -220,3 +220,10 @@ class GradeSnapshot(Base):
     inputs: Mapped[dict] = mapped_column(JSONB)
     result: Mapped[dict] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class WatchlistItem(Base):
+    __tablename__ = "watchlist_item"
+
+    asset_id: Mapped[int] = mapped_column(ForeignKey("asset.id"), primary_key=True)
+    added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

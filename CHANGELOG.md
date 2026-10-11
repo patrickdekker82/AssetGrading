@@ -1,5 +1,70 @@
 # Changelog
 
+## Fase 3 – Interface en grafiek (2026-10-11)
+
+### Gebouwd
+
+- **Ranglijst** op elke kolom sorteerbaar en filterbaar (tekst, minimumwaarden, grade "X of beter",
+  sjabloon, gewijzigde grade, gedaald in 90 dagen), met een mini-grafiek van 90 dagen en eigen weergaven
+  voor de top 50, stablecoins en alle gevolgde munten. Elke naam linkt naar de assetpagina.
+- **Assetpagina** met de zeven onderdelen uit hoofdstuk 2:
+  1. de kop met grade, bandbreedte, score, Kwaliteit, Timing, datadekking, modelversie, peildatum,
+     horizon, koers in euro en in de oorspronkelijke valuta, en de grade ten opzichte van Bitcoin;
+  2. pijlerbalken met gewicht en bijdrage;
+  3. per maatstaf de waarde, de positie in de vergelijkingsgroep, de richting en de bron met datum;
+  4. de gates met hun status;
+  5. de toelichting;
+  6. de grafiek;
+  7. de geschiedenis.
+- **Toelichting** als vaste sjabloontekst: 120 tot 200 woorden bij een grade, met de drie sterkste en drie
+  zwakste punten, de gates en wat de grade zou veranderen. Elk getal komt uit de snapshot (getest). Dit
+  is ook de terugvaltekst voor de taalmodeltoelichting uit fase 7.
+- **Grafiek** met Lightweight Charts 5.2.1:
+  - kaarsen met volume en gemiddelden;
+  - hooguit twee indicatorvensters, afgedwongen;
+  - dag, week en maand, met lineaire of logaritmische schaal;
+  - kruisdraad met een legenda van alle waarden;
+  - vergelijken met Bitcoin;
+  - gradewijzigingen als markering en gate-zones als rode arcering;
+  - de indicatorset voor crypto uit hoofdstuk 7, aan en uit per knop; je eigen keuze wordt onthouden;
+  - een trendlijn-tekenhulp, naar de officiële plugin;
+  - de TradingView-vermelding staat aan;
+  - een optionele tab met de gratis TradingView-widget.
+- **Indicatoren op de server** (TA-Lib): gemiddelden over 50 en 200 dagen en over 20 en 200 weken, EMA
+  over 21 weken, Mayer-multiple, sterkte ten opzichte van Bitcoin, RSI 14 op weekbasis, gerealiseerde
+  volatiliteit over 30 en 90 dagen, ATR in procenten, funding en open interest. Ze worden op dagdata
+  berekend en per week of maand bemonsterd, zodat een gemiddelde in elke weergave hetzelfde betekent.
+- **Zoeken** in de kop: op naam, ticker of contractadres (EVM en Solana); ISIN volgt met fase 4 en 5.
+  Een munt buiten de lijsten wordt op verzoek opgehaald en beoordeeld, in circa een halve minuut. Staat
+  een munt in geen enkele bron, dan staat dat er en verschijnt er geen grade.
+- **Volglijst** (migratie `0005`): volgen vanaf de assetpagina, met een eigen ranglijst op de tab
+  Volglijst.
+- Woordenlijst-tooltips op elke kolom, pijler, maatstaf en elk begrip.
+
+### Acceptatie
+
+- **Van ranglijst naar assetpagina en per pijler zien welke maatstaf de score bepaalt:** gehaald. Een
+  klik op de naam opent de pagina; per pijler staat bij elke maatstaf de waarde, de score, het percentiel
+  in de groep (met de groepsgrootte) en de bron met datum.
+- **De grafiek schuift en zoomt vloeiend op de Synology:** de grafiek wordt in de browser van je Mac of
+  telefoon getekend; de NAS levert alleen de data.
+  - Gemeten in headless Chromium zonder grafische kaart: 57 beelden per seconde, en 33 met een 4×
+    vertraagde processor (vóór de optimalisaties 18).
+  - De dagweergave toont daarom standaard de laatste twee jaar; verder terug kun je schuiven.
+  - De server levert de daggrafiek van Bitcoin (9 jaar) gecomprimeerd in 378 KB. Een eerste opvraag
+    duurt hier 0,6 s; op de Celeron reken ik op ongeveer 2 s. Daarna komt de grafiek 15 minuten uit
+    het geheugen (hier 14 ms).
+  - Een echte meting op de NAS staat nog open.
+- Tests: 194 voor de rekenserver (indicatoren, toelichting, API), 12 voor de webinterface (sorteren,
+  filteren, opmaak).
+
+### Opgemerkt
+
+- Bonk (opgehaald via zoeken) krijgt F: volgens RugCheck is maar circa 15% van de liquiditeit verbrand of
+  vergrendeld, en de prompt zegt dan F. Bij grote, oude memecoins met veel liquiditeitsverschaffers is dat
+  streng. De drempel staat in `config/model/templates/crypto_memecoin.yaml` (`lp_locked_min_pct`); een
+  wijziging is een nieuwe modelversie.
+
 ## Fase 2 – Grading-engine en crypto (2026-10-11)
 
 ### Gebouwd

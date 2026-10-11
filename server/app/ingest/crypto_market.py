@@ -23,11 +23,11 @@ STABLECOIN_SERIES = "STABLECOIN_SUPPLY_USD"
 
 
 def _tracked(ctx: "CryptoContext"):
-    from app.ingest.crypto import _aliases, tracked_assets
+    from app.ingest.crypto import _aliases, targets
 
     with ctx.sf() as session:
         return [(a.id, a.coingecko_id, a.symbol.upper(), list(a.categories or []), a.template_override,
-                 _aliases(session, a.id)) for a in tracked_assets(session)]
+                 _aliases(session, a.id)) for a in targets(ctx, session)]
 
 
 def _store(ctx: "CryptoContext", asset_id: int, source: str, facts: list[Fact], snapshot: bool = True) -> None:

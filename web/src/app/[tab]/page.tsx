@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import type { GradeRow } from "@/components/GradeBadge";
-import { GradeTable } from "@/components/GradeTable";
+import { RankingTable as RankingTableLive } from "@/components/RankingTable";
 import { Term } from "@/components/Term";
 import { fetchServer } from "@/lib/server";
 import { isTabSlug, RANKING_COLUMNS, TABS } from "@/lib/tabs";
@@ -48,9 +48,6 @@ export default async function TabPage({ params }: Props) {
       {tab === "model" ? (
         <EmptyState phase={info?.phase ?? 8}
           text="Hier verschijnt de staat van dienst van het model: rendement per letter tegen de benchmark, de rangcorrelatie per maand en openstaande voorstellen. Live resultaten en terugtest staan altijd gescheiden." />
-      ) : tab === "watchlist" ? (
-        <EmptyState phase={info?.phase ?? 7}
-          text="Je volglijst is nog leeg. Straks kun je via het zoekveld assets uit alle klassen toevoegen." />
       ) : (
         <Ranking tab={tab} phase={info?.phase ?? 1} />
       )}
@@ -62,28 +59,28 @@ type Grades = { as_of: string | null; model_version: string; rows: GradeRow[] };
 
 async function Ranking({ tab, phase }: { tab: string; phase: number }) {
   const grades = await fetchServer<Grades>(`/api/grades?tab=${tab}`);
-  if (!grades || !grades.as_of || grades.rows.length === 0) return <RankingTable phase={phase} />;
-  const list = grades.rows.filter((r) => r.in_list);
+  if (!grades || !grades.as_of || grades.rows.length === 0) {
+    return tab === "watchlist"
+      ? <EmptyState phase={phase} text="Je volglijst is nog leeg. Zoek een asset en kies 'Volgen'." />
+      : <RankingTable phase={phase} />;
+  }
+  const list = tab === "watchlist" ? grades.rows : grades.rows.filter((r) => r.in_list);
   const stable = grades.rows.filter((r) => r.exclusion === "stablecoin");
   const withGrade = list.filter((r) => r.status !== "no_grade").length;
+  const views = tab === "watchlist"
+    ? [{ id: "all", label: "Volglijst", rows: list }]
+    : [
+      { id: "list", label: `Top ${list.length}`, rows: list },
+      ...(stable.length ? [{ id: "stable", label: "Stablecoins", rows: stable }] : []),
+      { id: "all", label: "Alle gevolgde", rows: grades.rows },
+    ];
   return (
     <>
       <p className="meta">
         <Term id="peildatum">Peildatum</Term> {grades.as_of} · <Term id="modelversie">Modelversie</Term>{" "}
         {grades.model_version} · <Term id="horizon">Horizon</Term> 6–12 maanden · {withGrade} van {list.length} met grade
       </p>
-      <div className="card">
-        <GradeTable rows={list.map((r, i) => ({ ...r, rank: i + 1 }))} />
-      </div>
-      {stable.length > 0 && (
-        <>
-          <h2 className="section-title">Stablecoins</h2>
-          <p className="muted">Geen beleggingsgrade, wel een <Term id="pegveiligheid">pegveiligheid</Term> van 1 (sterk) tot 5 (zwak).</p>
-          <div className="card">
-            <GradeTable rows={stable.map((r, i) => ({ ...r, rank: i + 1 }))} />
-          </div>
-        </>
-      )}
+      <RankingTableLive tab={tab} views={views} />
     </>
   );
 }

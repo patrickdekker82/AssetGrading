@@ -19,7 +19,7 @@ def _pillar_note(pillars: list[dict], best: bool) -> str | None:
 
 @router.get("/grades")
 def grades(request: Request, tab: str = "crypto") -> dict:
-    if tab != "crypto":
+    if tab not in ("crypto", "watchlist"):
         return {"tab": tab, "as_of": None, "rows": [], "model_version": request.app.state.model_config.version}
     jobs = request.app.state.jobs
     if jobs.model_version_id is None:
@@ -40,14 +40,23 @@ def grades(request: Request, tab: str = "crypto") -> dict:
                 SELECT DISTINCT ON (asset_id) asset_id, letter FROM grade_snapshot
                 WHERE model_version_id = :v AND as_of <= :d - 30 ORDER BY asset_id, as_of DESC
             )
+            , spark AS (
+                SELECT asset_id, array_agg(round(close_eur::numeric, 10)::float8 ORDER BY ts) AS closes
+                FROM price_daily_eur WHERE ts > :d - 90 AND ts <= :d GROUP BY asset_id
+            )
             SELECT a.coingecko_id, a.name, a.symbol, g.template_id, g.status, g.letter, g.score, g.quality,
                    g.timing, g.coverage, g.peg_safety, g.price_eur, g.result, l.rank AS mcap_rank, l.included,
-                   l.exclusion, m.letter AS letter_month_ago
+                   l.exclusion, m.letter AS letter_month_ago, sp.closes AS spark,
+                   (w.asset_id IS NOT NULL) AS watched
             FROM grade_snapshot g
             JOIN asset a ON a.id = g.asset_id
             LEFT JOIN list l ON l.asset_id = g.asset_id
             LEFT JOIN month_ago m ON m.asset_id = g.asset_id
-            WHERE g.as_of = :d AND g.model_version_id = :v
+            LEFT JOIN spark sp ON sp.asset_id = g.asset_id
+            LEFT JOIN watchlist_item w ON w.asset_id = g.asset_id
+            WHERE g.as_of = (SELECT max(as_of) FROM grade_snapshot x
+                             WHERE x.asset_id = g.asset_id AND x.model_version_id = :v)
+              AND g.model_version_id = :v AND g.as_of > :d - 7
             """
         ), {"d": as_of, "v": jobs.model_version_id}).mappings().all()
     out = []
@@ -62,7 +71,10 @@ def grades(request: Request, tab: str = "crypto") -> dict:
             "plus": _pillar_note(res.get("pillars", []), True), "minus": _pillar_note(res.get("pillars", []), False),
             "letter_month_ago": r["letter_month_ago"], "in_list": bool(r["included"]), "exclusion": r["exclusion"],
             "mcap_rank": r["mcap_rank"], "btc_relative": (res.get("btc_relative") or {}).get("letter"),
+            "spark": r["spark"] or [], "watched": bool(r["watched"]), "asset_class": "crypto",
         })
+    if tab == "watchlist":
+        out = [r for r in out if r["watched"]]
     out.sort(key=lambda x: (STATUS_ORDER.get(x["status"], 9), -(x["score"] or 0), x["mcap_rank"] or 999))
     for i, row in enumerate(out, 1):
         row["rank"] = i

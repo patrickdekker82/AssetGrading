@@ -25,6 +25,9 @@ export type GradeRow = {
   exclusion: string | null;
   mcap_rank: number | null;
   btc_relative: string | null;
+  spark: number[];
+  watched: boolean;
+  asset_class: string;
 };
 
 function tone(letter: string): string {

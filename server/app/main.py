@@ -3,8 +3,10 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.gzip import GZipMiddleware
 from sqlalchemy.orm import sessionmaker
 
+from app.api.assets import router as assets_router
 from app.api.data import router as data_router
 from app.api.grades import router as grades_router
 from app.api.routes import router
@@ -60,6 +62,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="Graadmeter", lifespan=lifespan)
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.include_router(router)
 app.include_router(data_router)
+app.include_router(assets_router)
 app.include_router(grades_router)

@@ -144,8 +144,8 @@ De app wordt in elf fases gebouwd (zie `CHANGELOG.md`). Na elke fase volgt een a
 | --- | --- | --- |
 | 0 | Fundament | Klaar |
 | 1 | Datalaag (crypto, wisselkoersen, macro) | Klaar |
-| 2 | Grading-engine en crypto | Klaar, wacht op akkoord |
-| 3 | Interface en grafiek | |
+| 2 | Grading-engine en crypto | Klaar |
+| 3 | Interface en grafiek | Klaar, wacht op akkoord |
 | 4 | Aandelen | |
 | 5 | ETF's, obligaties, indices en marktregime | |
 | 6 | Grondstoffen en valuta | |

@@ -5,6 +5,7 @@ import { GlossaryProvider } from "@/components/GlossaryProvider";
 import { type Health, HealthBadge } from "@/components/HealthBadge";
 import { Logo } from "@/components/Logo";
 import { Nav } from "@/components/Nav";
+import { SearchBox } from "@/components/SearchBox";
 import { EMPTY_GLOSSARY, type Glossary } from "@/lib/glossary";
 import { fetchServer } from "@/lib/server";
 import "./globals.css";
@@ -33,6 +34,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 <span>Graadmeter</span>
               </Link>
               <div className="header-links">
+                <SearchBox />
                 <Link href="/verbruik" className="header-link">Verbruik</Link>
                 <HealthBadge health={health} />
               </div>

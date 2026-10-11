@@ -39,6 +39,7 @@ class CryptoContext:
     today: date
     report: Report
     model: ModelConfig | None = None
+    only: set[int] | None = None        # limit the run to these asset ids
 
     @property
     def yesterday(self) -> date:
@@ -74,6 +75,46 @@ def run_crypto(sf: sessionmaker[Session], providers: Providers, cfg: ProvidersCo
     if ctx.model is not None:
         market.update_memecoin_safety(ctx)
     return ctx.report
+
+
+def ingest_single(sf: sessionmaker[Session], providers: Providers, cfg: ProvidersConfig, universes: Universes,
+                  coingecko_id: str, model: ModelConfig | None = None) -> tuple[int | None, Report]:
+    """Fetch and store everything for one coin that is not in the nightly list (search on request)."""
+    ctx = CryptoContext(sf, providers, cfg, universes, datetime.now(UTC).date(), Report(), model)
+    update_fx(sf, providers, cfg, ctx.report, ctx.today)
+    try:
+        res = providers.coingecko.markets(per_page=1, ids=coingecko_id)
+    except ProviderError as exc:
+        ctx.report.error(f"coingecko: {exc}")
+        return None, ctx.report
+    if not res.data:
+        return None, ctx.report
+    row = res.data[0]
+    with sf() as session:
+        asset = session.scalar(select(Asset).where(Asset.coingecko_id == coingecko_id))
+        if asset is None:
+            asset = Asset(asset_class="crypto", coingecko_id=coingecko_id, symbol=row["symbol"].upper(),
+                          name=row["name"])
+            session.add(asset)
+            session.flush()
+        if not asset.tracked:
+            asset.tracked, asset.tracked_since = True, ctx.today
+        facts = CoinGeckoProvider.market_facts(row, ctx.yesterday, res.call_id)
+        insert_facts(session, asset.id, "coingecko", facts, datetime.now(UTC), snapshot=True)
+        session.commit()
+        asset_id = asset.id
+    ctx.only = {asset_id}
+    refresh_metadata(ctx)
+    map_sources(ctx, {coingecko_id: row})
+    update_prices(ctx)
+    update_defillama(ctx)
+    update_coinmetrics(ctx)
+    market.update_order_books(ctx)
+    market.update_mica_venues(ctx, {coingecko_id: row})
+    market.update_derivatives(ctx)
+    if model is not None:
+        market.update_memecoin_safety(ctx)
+    return asset_id, ctx.report
 
 
 # --- list and membership -------------------------------------------------------------------------
@@ -143,6 +184,12 @@ def _stale(moment: datetime | None, days: int, now: datetime) -> bool:
     return moment is None or now - moment > timedelta(days=days)
 
 
+def targets(ctx: "CryptoContext", session: Session) -> list[Asset]:
+    """Tracked assets this run works on: all of them, or only `ctx.only` (fetching one asset on request)."""
+    assets = tracked_assets(session)
+    return [a for a in assets if a.id in ctx.only] if ctx.only is not None else assets
+
+
 def tracked_assets(session: Session) -> list[Asset]:
     return list(session.scalars(
         select(Asset).where(Asset.asset_class == "crypto", Asset.tracked.is_(True)).order_by(Asset.id)
@@ -154,7 +201,7 @@ def refresh_metadata(ctx: CryptoContext) -> None:
     now = datetime.now(UTC)
     with ctx.sf() as session:
         days = ctx.cfg.crypto.metadata_refresh_days
-        todo = [a for a in tracked_assets(session) if _stale(a.meta_updated_at, days, now)]
+        todo = [a for a in targets(ctx, session) if _stale(a.meta_updated_at, days, now)]
         for asset in todo:
             try:
                 res = ctx.providers.coingecko.coin_detail(asset.coingecko_id)
@@ -203,7 +250,7 @@ def map_sources(ctx: CryptoContext, market_rows: dict[str, dict]) -> None:
     """Link each tracked coin to its Binance and Coinbase symbols, after a price sanity check."""
     now = datetime.now(UTC)
     with ctx.sf() as session:
-        todo = [a for a in tracked_assets(session)
+        todo = [a for a in targets(ctx, session)
                 if a.coingecko_id in market_rows
                 and _stale(a.mapping_checked_at, ctx.cfg.crypto.metadata_refresh_days, now)]
         if not todo:
@@ -372,7 +419,7 @@ def update_prices(ctx: CryptoContext) -> None:
     """
     with ctx.sf() as session:
         assets = [(a.id, a.coingecko_id, list(a.price_sources or ["coingecko"]), _aliases(session, a.id))
-                  for a in tracked_assets(session)]
+                  for a in targets(ctx, session)]
     year_ago = ctx.yesterday - timedelta(days=364)
     for asset_id, gecko_id, sources, aliases in assets:
         venue_first: list[date] = []
@@ -424,7 +471,7 @@ def _update_source(ctx: CryptoContext, asset_id: int, gecko_id: str, source: str
 
 def update_defillama(ctx: CryptoContext) -> None:
     with ctx.sf() as session:
-        assets = [(a.id, a.coingecko_id, _aliases(session, a.id)) for a in tracked_assets(session)]
+        assets = [(a.id, a.coingecko_id, _aliases(session, a.id)) for a in targets(ctx, session)]
     dl = ctx.providers.defillama
     for asset_id, gecko_id, aliases in assets:
         if "defillama_chain" in aliases:
@@ -457,7 +504,7 @@ def update_defillama(ctx: CryptoContext) -> None:
 def update_coinmetrics(ctx: CryptoContext) -> None:
     with ctx.sf() as session:
         mapped = {}
-        for a in tracked_assets(session):
+        for a in targets(ctx, session):
             cm = _aliases(session, a.id).get("coinmetrics")
             if cm:
                 mapped[cm] = (a.id, last_fact_date(session, a.id, "coinmetrics", "cm_"))
