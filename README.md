@@ -65,6 +65,7 @@ Alles wat het model bepaalt staat in versiebeheerde YAML-bestanden, niet in code
 | `config/model/metrics.yaml` | Alle maatstaven, met of hoger of lager beter is |
 | `config/model/technical.yaml` | De technische score en de standaardindicatoren per klasse |
 | `config/universes.yaml` | Tabs en lijstgrootte (top 25, 50 of 100) |
+| `config/providers.yaml` | Databronnen: adressen, snelheidslimieten, maandbudgetten, planning van de nachtelijke runs |
 | `config/glossary.nl.yaml` | De woordenlijst: elke tooltip in de interface komt hiervandaan |
 | `.env` | Wachtwoorden en API-sleutels (nooit in git) |
 
@@ -82,6 +83,26 @@ tellen niet als wijziging. Controleren zonder vast te leggen: `python -m app.cli
 
 Gewichten, drempels en gates veranderen nooit automatisch; vanaf fase 9 doet de app hooguit een voorstel
 dat je zelf goedkeurt.
+
+## Data en nachtelijke runs
+
+De rekenserver haalt elke nacht zelf data op (tijden in UTC, instelbaar in `config/providers.yaml`):
+
+| Taak | Wanneer | Wat |
+| --- | --- | --- |
+| Crypto | 00:05 | Top 50 van CoinGecko, dagkoersen (Coinbase → Binance → CoinGecko), marktwaarde, TVL en fees (DefiLlama), on-chain data (Coin Metrics) |
+| Wisselkoersen en macro | werkdagen 16:30 | ECB-referentiekoersen (Frankfurter) en rentes, VIX en dollarindex (FRED) |
+| Opruimen | 03:30 | Ruwe antwoorden ouder dan de bewaartermijn per bron |
+
+De pagina **Verbruik** (rechtsboven) toont per bron het aantal aanroepen, het maandbudget, fouten,
+de laatste runs en hoeveel data er is. Daar kun je een taak ook direct starten. Via de opdrachtregel:
+`docker compose exec server python -m app.cli run crypto`.
+
+Sleutels in `.env`: `COINGECKO_API_KEY` (gratis Demo-sleutel) en `FRED_API_KEY` (gratis). Zonder
+sleutel slaat de app die bron over en meldt dat; verder werkt alles door.
+
+Elke run is veilig te herhalen: bestaande rijen worden nooit dubbel geschreven, en een herzien cijfer
+komt als nieuwe rij naast het oude (met het moment waarop het bekend werd).
 
 ## Back-up
 
@@ -107,8 +128,8 @@ De app wordt in elf fases gebouwd (zie `CHANGELOG.md`). Na elke fase volgt een a
 
 | Fase | Inhoud | Status |
 | --- | --- | --- |
-| 0 | Fundament | Klaar, wacht op akkoord |
-| 1 | Datalaag (crypto, wisselkoersen, macro) | |
+| 0 | Fundament | Klaar |
+| 1 | Datalaag (crypto, wisselkoersen, macro) | Klaar, wacht op akkoord |
 | 2 | Grading-engine en crypto | |
 | 3 | Interface en grafiek | |
 | 4 | Aandelen | |

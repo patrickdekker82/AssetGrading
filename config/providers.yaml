@@ -1,0 +1,96 @@
+# Data providers (chapter 4). Not part of the model version: changing a limit does not change grades.
+# rate_limit: at most `calls` per `per_seconds`. monthly_budget: hard stop (cost units per calendar
+# month, UTC); null = no budget. raw_retention_days: how long raw responses are kept (call log stays).
+# Limits checked against provider documentation on 2026-10-11; see CHANGELOG for deviations.
+
+providers:
+  binance:
+    base_url: https://data-api.binance.vision
+    rate_limit: {calls: 5, per_seconds: 1}
+    monthly_budget: null
+    raw_retention_days: 400
+  coinbase:
+    base_url: https://api.exchange.coinbase.com
+    rate_limit: {calls: 3, per_seconds: 1}
+    monthly_budget: null
+    raw_retention_days: 400
+  coingecko:
+    base_url: https://api.coingecko.com/api/v3
+    api_key_env: COINGECKO_API_KEY
+    # Demo plan: 10,000 calls a month. Stop at 9,000 to keep room for manual searches.
+    rate_limit: {calls: 25, per_seconds: 60}
+    monthly_budget: 9000
+    raw_retention_days: 400
+    attribution: Data van CoinGecko
+  defillama:
+    base_url: https://api.llama.fi
+    rate_limit: {calls: 1, per_seconds: 1}
+    monthly_budget: null
+    # The daily overview responses are several MB; keep raw copies for a month.
+    raw_retention_days: 30
+  coinmetrics:
+    base_url: https://community-api.coinmetrics.io/v4
+    # Community API: 10 requests per 6 seconds; non-commercial licence.
+    rate_limit: {calls: 8, per_seconds: 6}
+    monthly_budget: null
+    raw_retention_days: 400
+  frankfurter:
+    base_url: https://api.frankfurter.dev/v1
+    rate_limit: {calls: 1, per_seconds: 1}
+    monthly_budget: null
+    raw_retention_days: 400
+  fred:
+    base_url: https://api.stlouisfed.org/fred
+    api_key_env: FRED_API_KEY
+    rate_limit: {calls: 60, per_seconds: 60}
+    monthly_budget: null
+    raw_retention_days: 400
+    attribution: "Bron: FRED, Federal Reserve Bank of St. Louis"
+
+crypto:
+  history_start: "2017-01-01"        # enough for the 200-week average and 3-year volatility history
+  markets_page_size: 250             # one CoinGecko call covers the top 250 for membership history
+  # CoinGecko categories that keep a coin out of the default list; shown in their own filters.
+  excluded_categories:
+    stablecoins: stablecoin
+    wrapped-tokens: wrapped
+    bridged-tokens: wrapped
+    liquid-staking-tokens: staked
+    liquid-restaking-tokens: staked
+  track_stablecoins: 10              # prices for the largest stablecoins (peg safety, USDT conversion)
+  # Preference order per asset, with fallback. Coinbase first: real USD quotes, converted with ECB rates.
+  # Binance quotes in USDT, converted via Coinbase's USDT-USD close (available from 2021-05-04).
+  # CoinGecko last: EUR closes only, one year of history on the Demo plan.
+  price_sources: [coinbase, binance, coingecko]
+  binance_quotes: [USDT]
+  coinbase_quotes: [USD, EUR]
+  # A venue symbol is only accepted when its last close is within this ratio of CoinGecko's price,
+  # so a ticker shared by two different coins never feeds the wrong price series.
+  mapping_price_tolerance: 0.20
+  metadata_refresh_days: 30
+  coinmetrics_metrics: [CapMVRVCur, CapMrktCurUSD, AdrActCnt, TxCnt, FeeTotNtv, IssTotUSD, IssTotNtv, SplyCur, HashRate]
+
+fx:
+  base: EUR
+  currencies: [USD, GBP, CHF, JPY, CAD, AUD, NOK, SEK, DKK, CNY, HKD, SGD, PLN]
+  history_start: "2010-01-01"
+
+macro:
+  history_start: "1990-01-01"
+  fred_series:
+    BAMLH0A0HYM2: Renteopslag high-yield-obligaties (VS)
+    DFII10: Reële rente 10 jaar (VS)
+    DGS10: Rente staatsobligaties 10 jaar (VS)
+    DGS2: Rente staatsobligaties 2 jaar (VS)
+    DGS3MO: Rente staatsobligaties 3 maanden (VS)
+    T10Y2Y: Rentecurve 10 jaar min 2 jaar (VS)
+    T10Y3M: Rentecurve 10 jaar min 3 maanden (VS)
+    VIXCLS: VIX-volatiliteitsindex
+    DTWEXBGS: Dollarindex (breed, handelsgewogen)
+    T10YIE: Verwachte inflatie 10 jaar (VS)
+
+schedule:                            # UTC
+  crypto: "5 0 * * *"                # 00:05, after the daily close
+  # Use day names: APScheduler numbers weekdays from Monday = 0, unlike standard cron.
+  fx_macro: "30 16 * * mon-fri"      # after the ECB reference rates (around 16:00 CET)
+  prune_raw: "30 3 * * *"

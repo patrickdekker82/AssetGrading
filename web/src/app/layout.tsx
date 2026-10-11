@@ -32,7 +32,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 <Logo />
                 <span>Graadmeter</span>
               </Link>
-              <HealthBadge health={health} />
+              <div className="header-links">
+                <Link href="/verbruik" className="header-link">Verbruik</Link>
+                <HealthBadge health={health} />
+              </div>
             </div>
             <Nav />
           </header>
