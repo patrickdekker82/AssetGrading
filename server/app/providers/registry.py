@@ -12,8 +12,16 @@ from app.providers.coingecko import CoinGeckoProvider
 from app.providers.coinmetrics import CoinMetricsProvider
 from app.providers.config import ProvidersConfig
 from app.providers.defillama import DefiLlamaProvider
+from app.providers.derivatives import BinanceFuturesProvider, BybitProvider, OkxProvider
 from app.providers.frankfurter import FrankfurterProvider
 from app.providers.fred import FredProvider
+from app.providers.venues import (
+    BitvavoProvider,
+    CoinbaseBookProvider,
+    DexScreenerProvider,
+    RugCheckProvider,
+    StablecoinSupplyProvider,
+)
 
 ADAPTERS: dict[str, type[Provider]] = {
     "binance": BinanceProvider,
@@ -23,6 +31,14 @@ ADAPTERS: dict[str, type[Provider]] = {
     "coinmetrics": CoinMetricsProvider,
     "frankfurter": FrankfurterProvider,
     "fred": FredProvider,
+    "coinbase_book": CoinbaseBookProvider,
+    "binance_futures": BinanceFuturesProvider,
+    "bybit": BybitProvider,
+    "okx": OkxProvider,
+    "bitvavo": BitvavoProvider,
+    "dexscreener": DexScreenerProvider,
+    "rugcheck": RugCheckProvider,
+    "defillama_stablecoins": StablecoinSupplyProvider,
 }
 
 

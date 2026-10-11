@@ -195,3 +195,28 @@ class MacroObservation(Base):
     available_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     call_id: Mapped[int | None] = mapped_column(ForeignKey("provider_call_log.id"))
+
+
+class GradeSnapshot(Base):
+    """One grade per asset, day and model version. Append-only: the record of what the model said."""
+
+    __tablename__ = "grade_snapshot"
+    __table_args__ = (UniqueConstraint("asset_id", "as_of", "model_version_id"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    asset_id: Mapped[int] = mapped_column(ForeignKey("asset.id"))
+    as_of: Mapped[date] = mapped_column(Date)
+    model_version_id: Mapped[int] = mapped_column(ForeignKey("model_version.id"))
+    template_id: Mapped[str] = mapped_column(String(40))
+    status: Mapped[str] = mapped_column(String(20))
+    score: Mapped[float | None] = mapped_column(Float)
+    quality: Mapped[float | None] = mapped_column(Float)
+    timing: Mapped[float | None] = mapped_column(Float)
+    coverage: Mapped[float] = mapped_column(Float)
+    letter: Mapped[str | None] = mapped_column(String(3))
+    peg_safety: Mapped[int | None] = mapped_column(Integer)
+    price_eur: Mapped[float | None] = mapped_column(Float)
+    knowledge_time: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    inputs: Mapped[dict] = mapped_column(JSONB)
+    result: Mapped[dict] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

@@ -34,6 +34,46 @@ providers:
     rate_limit: {calls: 8, per_seconds: 6}
     monthly_budget: null
     raw_retention_days: 400
+  coinbase_book:
+    base_url: https://api.exchange.coinbase.com
+    rate_limit: {calls: 3, per_seconds: 1}
+    monthly_budget: null
+    raw_retention_days: 14       # level-2 books are large
+  binance_futures:
+    base_url: https://fapi.binance.com
+    rate_limit: {calls: 5, per_seconds: 1}
+    monthly_budget: null
+    raw_retention_days: 90
+  bybit:
+    base_url: https://api.bybit.com
+    rate_limit: {calls: 5, per_seconds: 1}
+    monthly_budget: null
+    raw_retention_days: 90
+  okx:
+    base_url: https://www.okx.com
+    rate_limit: {calls: 5, per_seconds: 1}
+    monthly_budget: null
+    raw_retention_days: 90
+  bitvavo:
+    base_url: https://api.bitvavo.com
+    rate_limit: {calls: 5, per_seconds: 1}
+    monthly_budget: null
+    raw_retention_days: 90
+  dexscreener:
+    base_url: https://api.dexscreener.com
+    rate_limit: {calls: 5, per_seconds: 1}
+    monthly_budget: null
+    raw_retention_days: 90
+  rugcheck:
+    base_url: https://api.rugcheck.xyz
+    rate_limit: {calls: 1, per_seconds: 1}
+    monthly_budget: null
+    raw_retention_days: 14       # full reports are several MB
+  defillama_stablecoins:
+    base_url: https://stablecoins.llama.fi
+    rate_limit: {calls: 1, per_seconds: 1}
+    monthly_budget: null
+    raw_retention_days: 30
   frankfurter:
     base_url: https://api.frankfurter.dev/v1
     rate_limit: {calls: 1, per_seconds: 1}
@@ -69,6 +109,12 @@ crypto:
   mapping_price_tolerance: 0.20
   metadata_refresh_days: 30
   coinmetrics_metrics: [CapMVRVCur, CapMrktCurUSD, AdrActCnt, TxCnt, FeeTotNtv, IssTotUSD, IssTotNtv, SplyCur, HashRate]
+  # Funding and open interest: first reachable venue wins per coin (Binance and Bybit refuse some regions).
+  derivatives_sources: [binance_futures, bybit, okx]
+  derivatives_backfill_days: 365
+  # Exchanges with a MiCA licence, used for the gate "niet verhandelbaar bij een aanbieder met
+  # MiCA-vergunning". Licences as understood on 2026-10-11; check the ESMA/AFM registers when in doubt.
+  mica_venues: [coinbase, bitvavo]
 
 fx:
   base: EUR

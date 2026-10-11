@@ -34,6 +34,9 @@ class CryptoSettings(_Strict):
     metadata_refresh_days: int
     coinmetrics_metrics: list[str]
     coinmetrics_overrides: dict[str, str] = {}
+    derivatives_sources: list[str]
+    derivatives_backfill_days: int
+    mica_venues: list[str]
 
 
 class FxSettings(_Strict):

@@ -22,6 +22,7 @@ class Strict(BaseModel):
 class MetricDef(Strict):
     direction: Direction
     unit: Literal["ratio", "multiple", "score", "eur", "years", "days", "count", "z"]
+    scoring: Literal["percentile", "direct"] = "percentile"
 
 
 class MetricRef(Strict):
@@ -129,6 +130,7 @@ class ProductJudgement(Strict):
 
 class PegSafety(Strict):
     scale: tuple[int, int]
+    peg_deviation_max_bp: float = Field(gt=0)
     factors: list[str] = Field(min_length=1)
 
 
@@ -157,6 +159,7 @@ class Template(Strict):
     show_underlying_timing: bool = False
     mirror_pairs: bool = False
     flag_macro_price_divergence: bool = False
+    safety_params: dict[str, float] = {}
 
     @model_validator(mode="after")
     def check_grading(self) -> "Template":
@@ -220,6 +223,20 @@ class CoverageSettings(Strict):
         return self
 
 
+class PeerSettings(Strict):
+    min_group_size: int = Field(ge=2)
+    broaden: dict[str, str]
+    groups: dict[str, list[str]]
+    own_history_years: float = Field(gt=0)
+
+    @model_validator(mode="after")
+    def broaden_targets_exist(self) -> "PeerSettings":
+        for target in self.broaden.values():
+            if target not in self.groups:
+                raise ValueError(f"peers.broaden points to unknown group {target}")
+        return self
+
+
 class StabilitySettings(Strict):
     hysteresis_points: float = Field(ge=0)
     hysteresis_days: int = Field(ge=0)
@@ -234,6 +251,7 @@ class ModelSettings(Strict):
     plus_minus: Literal["thirds"]
     scoring: ScoringSettings
     coverage: CoverageSettings
+    peers: PeerSettings
     stability: StabilitySettings
     regime: dict[str, Any]
     etf_tax: dict[str, Any]
@@ -262,8 +280,25 @@ class TechnicalBlock(Strict):
     measures: list[str] | None = None
 
 
+class TechnicalParams(Strict):
+    sma_short: int
+    sma_long: int
+    sma_long_rising_lag: int
+    months_for_10m_average: int
+    momentum_long: int
+    momentum_skip: int
+    momentum_short: int
+    high_window: int
+    relative_windows: list[int]
+    volatility_window: int
+    volatility_history: int
+    min_block_coverage: float = Field(gt=0, le=1)
+    benchmark: str
+
+
 class TechnicalConfig(Strict):
     blocks: list[TechnicalBlock]
+    params: dict[str, TechnicalParams]
     rules: dict[str, Any]
     chart_sets: dict[str, dict[Literal["score", "context"], list[str]]]
 
@@ -273,3 +308,24 @@ class TechnicalConfig(Strict):
         if abs(total - 100) > 1e-9:
             raise ValueError(f"technical blocks sum to {total}, expected 100")
         return self
+
+
+class CategoryRule(Strict):
+    template: str
+    any_category: list[str]
+
+
+class TagRule(Strict):
+    any_category: list[str] | None = None
+    alias_kind: str | None = None
+
+
+class CryptoAssignment(Strict):
+    overrides: dict[str, str]
+    rules: list[CategoryRule]
+    default: str
+    tags: dict[str, TagRule]
+
+
+class AssignmentConfig(Strict):
+    crypto: CryptoAssignment

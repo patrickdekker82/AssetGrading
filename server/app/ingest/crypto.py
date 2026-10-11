@@ -13,11 +13,13 @@ from decimal import Decimal
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.ingest import crypto_market as market
 from app.ingest.fx_macro import update_fx
 from app.ingest.report import Report
 from app.ingest.store import insert_bars, insert_facts, insert_membership, last_bar_date, last_fact_date
+from app.modelconfig import ModelConfig
 from app.models import Asset, AssetAlias, FxRate, PriceBar
-from app.providers import ProviderError
+from app.providers import Fact, ProviderError
 from app.providers.coingecko import CoinGeckoProvider
 from app.providers.config import ProvidersConfig
 from app.providers.registry import Providers
@@ -36,6 +38,7 @@ class CryptoContext:
     universes: Universes
     today: date
     report: Report
+    model: ModelConfig | None = None
 
     @property
     def yesterday(self) -> date:
@@ -47,8 +50,8 @@ class CryptoContext:
 
 
 def run_crypto(sf: sessionmaker[Session], providers: Providers, cfg: ProvidersConfig, universes: Universes,
-               today: date | None = None) -> Report:
-    ctx = CryptoContext(sf, providers, cfg, universes, today or datetime.now(UTC).date(), Report())
+               today: date | None = None, model: ModelConfig | None = None) -> Report:
+    ctx = CryptoContext(sf, providers, cfg, universes, today or datetime.now(UTC).date(), Report(), model)
     update_fx(sf, providers, cfg, ctx.report, ctx.today)
     try:
         rows, exclusions, call_id = fetch_market_list(ctx)
@@ -64,6 +67,12 @@ def run_crypto(sf: sessionmaker[Session], providers: Providers, cfg: ProvidersCo
     update_prices(ctx)
     update_defillama(ctx)
     update_coinmetrics(ctx)
+    market.update_stablecoin_supply(ctx)
+    market.update_order_books(ctx)
+    market.update_mica_venues(ctx, market_rows)
+    market.update_derivatives(ctx)
+    if ctx.model is not None:
+        market.update_memecoin_safety(ctx)
     return ctx.report
 
 
@@ -120,7 +129,8 @@ def record_universe(ctx: CryptoContext, rows: list[dict], exclusions: dict[str, 
                 "source": "coingecko", "fetched_at": fetched_at, "call_id": call_id,
             })
             if asset.tracked:
-                facts = CoinGeckoProvider.market_facts(row, ctx.today, call_id)
+                # Live values fetched just after midnight describe the day that just closed.
+                facts = CoinGeckoProvider.market_facts(row, ctx.yesterday, call_id)
                 ctx.report.add("facts_added", insert_facts(session, asset.id, "coingecko", facts, fetched_at,
                                                            snapshot=True))
         ctx.report.add("membership_added", insert_membership(session, membership))
@@ -152,6 +162,14 @@ def refresh_metadata(ctx: CryptoContext) -> None:
                 ctx.report.error(f"metadata {asset.coingecko_id}: {exc}")
                 continue
             asset.categories = [c for c in res.data.get("categories") or [] if c]
+            extra = []
+            commits = (res.data.get("developer_data") or {}).get("commit_count_4_weeks")
+            if commits is not None:
+                extra.append(Fact("dev_commits_4w", ctx.yesterday, Decimal(str(commits)), "count", res.call_id))
+            watchers = res.data.get("watchlist_portfolio_users")
+            if watchers is not None:
+                extra.append(Fact("watchlist_users", ctx.yesterday, Decimal(str(watchers)), "count", res.call_id))
+            insert_facts(session, asset.id, "coingecko", extra, now, snapshot=True)
             for platform, address in (res.data.get("platforms") or {}).items():
                 if platform and address:
                     _set_alias(session, asset.id, f"contract:{platform}", address, "coingecko")
@@ -291,6 +309,10 @@ def _map_defillama(ctx: CryptoContext, session: Session, assets: list[Asset]) ->
             _set_alias(session, asset.id, "defillama_chain", chain_by_gecko[gid], "defillama")
         elif gid in by_gecko:
             _set_alias(session, asset.id, "defillama_protocol", by_gecko[gid]["slug"], "defillama")
+            audits = by_gecko[gid].get("audits")
+            if audits not in (None, ""):
+                fact = Fact("audits_count", ctx.yesterday, Decimal(str(audits)), "count")
+                insert_facts(session, asset.id, "defillama", [fact], datetime.now(UTC), snapshot=True)
         else:
             # Parent protocols (e.g. Uniswap) are not listed with a gecko_id; accept the slug only when
             # DefiLlama itself confirms the CoinGecko id.
@@ -414,7 +436,8 @@ def update_defillama(ctx: CryptoContext) -> None:
             slug = aliases["defillama_protocol"]
             calls = [lambda s=slug: dl.protocol_tvl(s)[1],
                      lambda s=slug: dl.fees(s, "dailyFees")[1],
-                     lambda s=slug: dl.fees(s, "dailyRevenue")[1]]
+                     lambda s=slug: dl.fees(s, "dailyRevenue")[1],
+                     lambda s=slug: dl.fees(s, "dailyHoldersRevenue")[1]]
         else:
             continue
         facts = []

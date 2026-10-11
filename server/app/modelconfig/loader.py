@@ -15,7 +15,7 @@ from typing import Any
 import yaml
 from pydantic import ValidationError
 
-from app.modelconfig.schema import MetricDef, ModelSettings, TechnicalConfig, Template
+from app.modelconfig.schema import AssignmentConfig, MetricDef, ModelSettings, TechnicalConfig, Template
 
 LOCK_FILE = "versions.lock.yaml"
 
@@ -30,6 +30,7 @@ class ModelConfig:
     technical: TechnicalConfig
     metrics: dict[str, MetricDef]
     templates: dict[str, Template]
+    assignment: AssignmentConfig
     raw: dict[str, Any]
     config_hash: str
 
@@ -59,6 +60,7 @@ def load_model_config(model_dir: Path, *, check_lock: bool = True) -> ModelConfi
         "model": _read_yaml(model_dir / "model.yaml"),
         "technical": _read_yaml(model_dir / "technical.yaml"),
         "metrics": _read_yaml(model_dir / "metrics.yaml"),
+        "assignment": _read_yaml(model_dir / "assignment.yaml"),
         "templates": {},
     }
     for path in sorted((model_dir / "templates").glob("*.yaml")):
@@ -66,28 +68,42 @@ def load_model_config(model_dir: Path, *, check_lock: bool = True) -> ModelConfi
         if not isinstance(data, dict) or data.get("id") != path.stem:
             raise ModelConfigError(f"{path.name}: `id` must equal the file name ({path.stem})")
         raw["templates"][path.stem] = data
+    config = config_from_raw(raw)
+    if check_lock:
+        verify_lock(config, model_dir)
+    return config
 
+
+def config_from_raw(raw: dict[str, Any]) -> ModelConfig:
+    """Build a validated ModelConfig from parsed YAML, e.g. the copy stored in model_version.config."""
     try:
         settings = ModelSettings.model_validate(raw["model"])
         technical = TechnicalConfig.model_validate(raw["technical"])
         metrics = {k: MetricDef.model_validate(v) for k, v in raw["metrics"].items()}
         templates = {k: Template.model_validate(v) for k, v in raw["templates"].items()}
+        assignment = AssignmentConfig.model_validate(raw["assignment"])
     except ValidationError as exc:
         raise ModelConfigError(str(exc)) from exc
 
     _check_metric_references(templates, metrics)
-
-    config = ModelConfig(
+    _check_assignment(assignment, templates)
+    return ModelConfig(
         settings=settings,
         technical=technical,
         metrics=metrics,
         templates=templates,
+        assignment=assignment,
         raw=raw,
         config_hash=fingerprint(raw),
     )
-    if check_lock:
-        verify_lock(config, model_dir)
-    return config
+
+
+def _check_assignment(assignment: AssignmentConfig, templates: dict[str, Template]) -> None:
+    named = [r.template for r in assignment.crypto.rules] + [assignment.crypto.default]
+    named += list(assignment.crypto.overrides.values())
+    for template_id in named:
+        if template_id not in templates or templates[template_id].tab != "crypto":
+            raise ModelConfigError(f"assignment names unknown crypto template {template_id}")
 
 
 def _check_metric_references(templates: dict[str, Template], metrics: dict[str, MetricDef]) -> None:

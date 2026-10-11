@@ -1,6 +1,7 @@
 # Metric catalog. `direction`: higher | lower = which value is better for the asset;
 # none = only used by a gate or rule. Labels and explanations live in config/glossary.nl.yaml.
 # Units: ratio (0.12 = 12%), multiple, score, eur, years, days, count, z.
+# scoring: direct = the value is already a 0-100 score and is used as is instead of a percentile.
 accruals: {direction: lower, unit: ratio}
 active_addresses: {direction: higher, unit: count}
 admin_key_risk: {direction: lower, unit: score}
@@ -110,7 +111,7 @@ real_yield: {direction: higher, unit: ratio}
 redeemability: {direction: higher, unit: score}
 redemption_score: {direction: higher, unit: score}
 reer_deviation: {direction: lower, unit: ratio}
-regime_score: {direction: higher, unit: score}
+regime_score: {direction: higher, unit: score, scoring: direct}
 regulated_volume: {direction: higher, unit: eur}
 replication_physical: {direction: higher, unit: score}
 replication_score: {direction: higher, unit: score}
@@ -126,11 +127,11 @@ short_interest: {direction: lower, unit: ratio}
 solvency2_ratio: {direction: higher, unit: ratio}
 spread_per_default_risk: {direction: higher, unit: multiple}
 stablecoin_supply_growth: {direction: higher, unit: ratio}
-technical_score: {direction: higher, unit: score}
+technical_score: {direction: higher, unit: score, scoring: direct}
 terms_of_trade: {direction: higher, unit: score}
 top10_weight: {direction: lower, unit: ratio}
 tracking_difference: {direction: higher, unit: ratio}
-underlying_grade_score: {direction: higher, unit: score}
+underlying_grade_score: {direction: higher, unit: score, scoring: direct}
 unlock_30d: {direction: lower, unit: ratio}
 unlock_365d: {direction: lower, unit: ratio}
 unlock_90d: {direction: lower, unit: ratio}

@@ -229,3 +229,125 @@ def test_frankfurter_parses_rates():
     assert [(d, q, r) for d, q, r, _ in rows] == [
         (date(2026, 1, 2), "USD", Decimal("1.1")), (date(2026, 1, 5), "USD", Decimal("1.2"))
     ]
+
+
+# --- phase 2 adapters ---------------------------------------------------------------------------
+
+from app.providers.derivatives import (  # noqa: E402
+    BinanceFuturesProvider,
+    BybitProvider,
+    OkxProvider,
+    daily_mean_funding,
+)
+from app.providers.venues import (  # noqa: E402
+    BitvavoProvider,
+    CoinbaseBookProvider,
+    DexScreenerProvider,
+    RugCheckProvider,
+    StablecoinSupplyProvider,
+)
+
+
+def test_daily_mean_funding_skips_the_running_day():
+    def at(d, h):
+        return datetime(d.year, d.month, d.day, h, tzinfo=UTC)
+
+    y = TODAY - timedelta(days=1)
+    events = [(at(y, 0), 0.0001, 1), (at(y, 8), 0.0003, 1), (at(TODAY, 0), 0.01, 2)]
+    assert daily_mean_funding(events, before=TODAY) == {y: (pytest.approx(0.0002), 1)}
+
+
+def test_binance_futures_funding_and_open_interest():
+    def handler(request):
+        if request.url.path == "/fapi/v1/fundingRate":
+            return httpx.Response(200, json=[{"fundingTime": ms(TODAY) - 3_600_000, "fundingRate": "0.0001"}])
+        return httpx.Response(200, json=[{"sumOpenInterestValue": "123.5"}])
+
+    p, _ = make(BinanceFuturesProvider, handler)
+    assert [r for _, r, _ in p.funding_history("BTC", TODAY - timedelta(days=2))] == [0.0001]
+    assert p.open_interest_usd("BTC")[0] == 123.5
+
+
+def test_bybit_and_okx_parse_their_formats():
+    def bybit(request):
+        if "funding" in request.url.path:
+            return httpx.Response(200, json={"result": {"list": [
+                {"fundingRate": "0.0002", "fundingRateTimestamp": str(ms(TODAY) - 1)}]}})
+        return httpx.Response(200, json={"result": {"list": [{"openInterestValue": "99.5"}]}})
+
+    p, _ = make(BybitProvider, bybit)
+    assert [r for _, r, _ in p.funding_history("ETH", TODAY - timedelta(days=2))] == [0.0002]
+    assert p.open_interest_usd("ETH")[0] == 99.5
+
+    def okx(request):
+        if "funding" in request.url.path:
+            return httpx.Response(200, json={"code": "0", "data": [
+                {"fundingTime": str(ms(TODAY) - 1), "fundingRate": "0.0003", "realizedRate": "0.00025"}]})
+        if "instruments" in request.url.path:
+            return httpx.Response(200, json={"code": "0", "data": [{"instId": "SOL-USDT-SWAP", "state": "live"},
+                                                                    {"instId": "SOL-USD-SWAP", "state": "live"}]})
+        return httpx.Response(200, json={"code": "0", "data": [{"oiUsd": "77"}]})
+
+    p, _ = make(OkxProvider, okx)
+    assert p.perp_bases() == {"SOL"}
+    assert [r for _, r, _ in p.funding_history("SOL", TODAY - timedelta(days=2))] == [0.00025]
+    assert p.open_interest_usd("SOL")[0] == 77.0
+
+
+def test_okx_error_code_becomes_provider_error():
+    error = {"code": "51001", "msg": "Instrument ID does not exist"}
+    p, _ = make(OkxProvider, lambda r: httpx.Response(200, json=error))
+    with pytest.raises(ProviderError, match="does not exist") as err:
+        p.open_interest_usd("NOPE")
+    assert err.value.not_found
+
+
+def test_order_book_depth_within_two_percent():
+    book = {"bids": [["99", "1", 1], ["97", "5", 1]], "asks": [["101", "2", 1], ["104", "5", 1]]}
+    p, _ = make(CoinbaseBookProvider, lambda r: httpx.Response(200, json=book))
+    data, _ = p.depth("BTC-USD")
+    # mid 100: bids >= 98 (99*1) and asks <= 102 (101*2)
+    assert data["depth_quote"] == pytest.approx(99 + 202)
+    assert data["spread"] == pytest.approx(0.02)
+
+
+def test_bitvavo_keeps_trading_eur_markets():
+    def handler(request):
+        if request.url.path == "/v2/markets":
+            return httpx.Response(200, json=[{"market": "BTC-EUR", "base": "BTC", "quote": "EUR", "status": "trading"},
+                                             {"market": "OLD-EUR", "base": "OLD", "quote": "EUR", "status": "halted"}])
+        return httpx.Response(200, json=[{"market": "BTC-EUR", "last": "75000", "volumeQuote": "1000000"},
+                                         {"market": "OLD-EUR", "last": "1", "volumeQuote": "5"}])
+
+    p, _ = make(BitvavoProvider, handler)
+    listing, _ = p.eur_markets()
+    assert listing == {"BTC": {"last": 75000.0, "volume_eur": 1000000.0}}
+
+
+def test_dexscreener_sums_pair_liquidity():
+    pairs = [{"liquidity": {"usd": 100.0}}, {"liquidity": {"usd": 50.5}}, {}]
+    p, _ = make(DexScreenerProvider, lambda r: httpx.Response(200, json=pairs))
+    assert p.liquidity_usd("solana", "Mint")[0] == 150.5
+
+
+def test_rugcheck_excludes_pools_from_holder_concentration():
+    report = {
+        "mintAuthority": None, "freezeAuthority": "Auth",
+        "knownAccounts": {"PoolAddr": {"name": "Pool", "type": "AMM"}},
+        "topHolders": [{"address": "PoolAddr", "owner": "x", "pct": 40}, {"address": "A", "owner": "a", "pct": 6},
+                       {"address": "B", "owner": "b", "pct": 4}],
+        "markets": [{"lp": {"lpLockedPct": 100, "quoteUSD": 300, "baseUSD": 100}},
+                    {"lp": {"lpLockedPct": 0, "quoteUSD": 50, "baseUSD": 50}}],
+    }
+    p, _ = make(RugCheckProvider, lambda r: httpx.Response(200, json=report))
+    facts, _ = p.report("Mint")
+    assert facts["mint_authority_active"] == 0 and facts["freeze_authority_active"] == 1
+    assert facts["holders_top10_pct"] == 10
+    assert facts["lp_locked_pct"] == pytest.approx(80)
+
+
+def test_stablecoin_supply_sums_all_pegs():
+    rows = [{"date": str(secs(TODAY - timedelta(days=1))), "totalCirculatingUSD": {"peggedUSD": 100, "peggedEUR": 5}},
+            {"date": str(secs(TODAY)), "totalCirculatingUSD": {"peggedUSD": 101}}]
+    p, _ = make(StablecoinSupplyProvider, lambda r: httpx.Response(200, json=rows))
+    assert [(d, v) for d, v, _ in p.total_supply()] == [(TODAY - timedelta(days=1), 105.0)]

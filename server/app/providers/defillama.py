@@ -31,7 +31,8 @@ class DefiLlamaProvider(Provider):
     def fees(self, slug: str, data_type: str) -> tuple[dict, list[Fact]]:
         """Daily fees (dailyFees) or revenue (dailyRevenue) for a protocol or chain slug."""
         res = self.get_json(f"/summary/fees/{slug}", {"dataType": data_type})
-        field = "fees_usd" if data_type == "dailyFees" else "revenue_usd"
+        field = {"dailyFees": "fees_usd", "dailyRevenue": "revenue_usd",
+                 "dailyHoldersRevenue": "holders_revenue_usd"}[data_type]
         info = {"name": res.data.get("name"), "gecko_id": res.data.get("gecko_id")}
         facts = []
         today = datetime.now(UTC).date()

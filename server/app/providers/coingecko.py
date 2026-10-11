@@ -36,7 +36,7 @@ class CoinGeckoProvider(Provider):
         return self.get_json(
             f"/coins/{coin_id}",
             {"localization": "false", "tickers": "false", "market_data": "false",
-             "community_data": "false", "developer_data": "false", "sparkline": "false"},
+             "community_data": "false", "developer_data": "true", "sparkline": "false"},
         )
 
     @staticmethod

@@ -5,17 +5,19 @@ import traceback
 import zlib
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 
 from apscheduler.schedulers.base import BaseScheduler
 from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy import Engine, text
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.grading.crypto import grade_crypto
 from app.ingest.crypto import run_crypto
 from app.ingest.fx_macro import run_fx_macro
 from app.ingest.prune import run_prune
 from app.ingest.report import Report
+from app.modelconfig import ModelConfig
 from app.models import JobRun
 from app.providers.config import ProvidersConfig
 from app.providers.recorder import current_job_run
@@ -32,10 +34,31 @@ class JobContext:
     providers: Providers
     cfg: ProvidersConfig
     universes: Universes
+    model: ModelConfig | None = None
+    model_version_id: int | None = None
+
+
+def run_crypto_and_grade(c: JobContext) -> Report:
+    """Nightly crypto: ingest, then grade the last completed day."""
+    report = run_crypto(c.sf, c.providers, c.cfg, c.universes, model=c.model)
+    if c.model is None or c.model_version_id is None:
+        report.notes.append("Geen modelconfiguratie geladen; grading overgeslagen.")
+        return report
+    as_of = datetime.now(UTC).date() - timedelta(days=1)
+    try:
+        graded = grade_crypto(c.sf, c.model, c.model_version_id, as_of, date.fromisoformat(c.cfg.crypto.history_start))
+    except Exception as exc:  # noqa: BLE001 - keep the ingest result; report the grading failure
+        log.exception("crypto grading failed")
+        report.error(f"grading: {type(exc).__name__}: {exc}")
+        return report
+    for key, value in graded.counts.items():
+        report.add(key, value)
+    report.errors += graded.errors
+    return report
 
 
 JOBS: dict[str, Callable[[JobContext], Report]] = {
-    "crypto": lambda c: run_crypto(c.sf, c.providers, c.cfg, c.universes),
+    "crypto": run_crypto_and_grade,
     "fx_macro": lambda c: run_fx_macro(c.sf, c.providers, c.cfg),
     "prune_raw": lambda c: run_prune(c.sf, c.cfg),
 }

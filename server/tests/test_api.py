@@ -4,7 +4,10 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.exc import DBAPIError
 
 from app.db import get_engine
-from app.settings import get_settings
+from app.modelconfig import load_model_config
+from app.settings import REPO_ROOT, get_settings
+
+CURRENT_VERSION = load_model_config(REPO_ROOT / "config" / "model").version
 
 
 @pytest.fixture
@@ -25,7 +28,7 @@ def test_health_reports_ok(client):
     body = client.get("/api/health").json()
     assert body["status"] == "ok"
     assert body["database"] == "ok"
-    assert body["model_version"] == "0.1.0"
+    assert body["model_version"] == CURRENT_VERSION
     assert body["scheduler_running"] is True
     assert body["compute_ok"] is True
 
@@ -50,7 +53,7 @@ def test_model_endpoint(client):
 def test_model_version_is_registered_and_append_only(client, test_database_url):
     engine = create_engine(test_database_url)
     with engine.connect() as conn:
-        assert conn.execute(text("SELECT version FROM model_version")).scalars().all() == ["0.1.0"]
+        assert CURRENT_VERSION in conn.execute(text("SELECT version FROM model_version")).scalars().all()
         with pytest.raises(DBAPIError, match="append-only"):
             conn.execute(text("UPDATE model_version SET description = 'x'"))
     engine.dispose()

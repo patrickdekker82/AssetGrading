@@ -8,6 +8,9 @@ regime_adjust: false
 note_nl: Geen beleggingsgrade. Pegveiligheid van 1 (sterk) tot 5 (zwak).
 peg_safety:
   scale: [1, 5]
+  # Each factor is scored 0-100 (100 = safest); the average maps linearly to 1 (100) .. 5 (0).
+  # peg_deviation: mean absolute daily deviation from the peg over a year; 0 bp scores 100, max_bp or worse 0.
+  peg_deviation_max_bp: 100
   factors:
     - reserve_quality
     - redeemability

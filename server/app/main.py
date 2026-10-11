@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from sqlalchemy.orm import sessionmaker
 
 from app.api.data import router as data_router
+from app.api.grades import router as grades_router
 from app.api.routes import router
 from app.db import get_engine
 from app.glossary import load_glossary
@@ -39,12 +40,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     engine = get_engine()
     sf = sessionmaker(bind=engine)
     with sf() as session:
-        register_model_version(session, config)
+        model_version_id = register_model_version(session, config).id
     fail_orphaned_runs(engine, sf)
     log.info("model version %s (%s) active", config.version, config.config_hash[:12])
 
     providers = Providers(providers_config, DbRecorder(sf))
-    app.state.jobs = JobContext(engine, sf, providers, providers_config, app.state.universes)
+    app.state.jobs = JobContext(engine, sf, providers, providers_config, app.state.universes, config, model_version_id)
 
     app.state.scheduler = None
     if settings.scheduler_enabled:
@@ -61,3 +62,4 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(title="Graadmeter", lifespan=lifespan)
 app.include_router(router)
 app.include_router(data_router)
+app.include_router(grades_router)

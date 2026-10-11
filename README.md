@@ -104,6 +104,20 @@ sleutel slaat de app die bron over en meldt dat; verder werkt alles door.
 Elke run is veilig te herhalen: bestaande rijen worden nooit dubbel geschreven, en een herzien cijfer
 komt als nieuwe rij naast het oude (met het moment waarop het bekend werd).
 
+## Grades
+
+Na de nachtelijke cryptorun berekent de rekenserver voor elke gevolgde munt een grade voor de laatst
+afgesloten dag en slaat die op in `grade_snapshot` (nooit overschreven). Per munt komt er een grade, een
+pegveiligheid (stablecoins), een speculatie-oordeel (memecoins) of een reden waarom er geen grade is.
+
+- **Opnieuw berekenen:** `docker compose exec server python -m app.cli grade 2026-10-10`
+  (een dag die al een grade heeft, wordt niet overschreven).
+- **Controleren dat elke grade exact te herleiden is:** `docker compose exec server python -m app.cli verify`.
+- **Gegevens invullen die geen gratis bron heeft** (unlock-schema's, audits, hacks, bij RWA-tokens de
+  uitgever en bewaring): `docker compose exec server python -m app.cli set-fact <coingecko-id> <veld> <waarde>`,
+  bijvoorbeeld `set-fact arbitrum unlock_90d 0.04` of `set-fact somecoin flag_unresolved_exploit 1`.
+  Zo'n waarde telt mee vanaf het moment van invullen, nooit met terugwerkende kracht.
+
 ## Back-up
 
 ```bash
@@ -129,8 +143,8 @@ De app wordt in elf fases gebouwd (zie `CHANGELOG.md`). Na elke fase volgt een a
 | Fase | Inhoud | Status |
 | --- | --- | --- |
 | 0 | Fundament | Klaar |
-| 1 | Datalaag (crypto, wisselkoersen, macro) | Klaar, wacht op akkoord |
-| 2 | Grading-engine en crypto | |
+| 1 | Datalaag (crypto, wisselkoersen, macro) | Klaar |
+| 2 | Grading-engine en crypto | Klaar, wacht op akkoord |
 | 3 | Interface en grafiek | |
 | 4 | Aandelen | |
 | 5 | ETF's, obligaties, indices en marktregime | |

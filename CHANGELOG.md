@@ -1,5 +1,69 @@
 # Changelog
 
+## Fase 2 – Grading-engine en crypto (2026-10-11)
+
+### Gebouwd
+
+- **Grading-engine** (`server/app/grading/engine.py`): een zuivere functie van modelconfiguratie en invoer.
+  Percentielen binnen de vergelijkingsgroep (met afkappen op 5 en 95%), pijlers met maatstafgewichten en
+  terugvalmaatstaven, 80/20-menging van groep en eigen historie bij waardering, herverdeling van
+  ontbrekende pijlers, datadekking, gates (vier soorten), hysterese (2 punten of 5 dagen), bandbreedte
+  (elk gewicht ±20%), letterschaal in derden, Kwaliteit en Timing apart.
+- **Technische score** volgens hoofdstuk 7 met TA-Lib: trendstand (vier toetsen), momentum en afstand tot de
+  top als percentiel binnen de klasse, relatieve sterkte tegen Bitcoin, volatiliteit tegen de eigen
+  driejaarshistorie. Plus een technische grade ten opzichte van Bitcoin voor altcoins.
+- **Zeven cryptosjablonen** actief, met toewijzing op CoinGecko-categorie (`config/model/assignment.yaml`,
+  handmatig te overschrijven): Bitcoin, Platform, DeFi, Utility, Stablecoin (pegveiligheid 1–5),
+  Memecoin (veiligheidscontrole, hoogstens C, label speculatie) en RWA.
+- **Nieuwe data:** funding en open interest met dagelijkse archivering (Binance-futures → Bybit → OKX),
+  orderboekdiepte binnen 2% en spread (Coinbase), EUR-volume en notering bij Bitvavo, MiCA-beurscheck
+  (Coinbase, Bitvavo), DexScreener-liquiditeit en RugCheck-veiligheidsrapport voor Solana-memecoins,
+  totaal stablecoin-aanbod (DefiLlama), ontwikkelaarsactiviteit en volglijsten (CoinGecko), audits en
+  uitkering aan houders (DefiLlama).
+- **`grade_snapshot`** (migratie `0004`, alleen-toevoegen): per munt, dag en modelversie de grade, alle
+  invoer met bron en datum, de groepswaarden achter elk percentiel en de uitkomst per pijler en gate.
+  Maandsnapshots zijn de snapshots van de laatste dag van de maand.
+- **Herberekenen:** `python -m app.cli verify` rekent elke snapshot opnieuw uit met de modelconfiguratie
+  die bij die modelversie is opgeslagen. `set-fact` voor gegevens zonder gratis bron.
+- Grading draait automatisch na de nachtelijke cryptorun. De cryptotab toont nu de ranglijst met grade,
+  score, Kwaliteit, Timing, datadekking, koers en sterkste en zwakste pijler; stablecoins apart met
+  pegveiligheid. Peildatum, modelversie en horizon staan erboven.
+- Modelversie **0.2.0** (toewijzingsregels, technische parameters, regels voor vergelijkingsgroepen).
+
+### Acceptatie (live gemeten op 11 oktober 2026, peildatum 10 oktober)
+
+- **Elke crypto in de top 50 heeft een grade of een uitgelegde reden:** 31 met grade (9 volledig,
+  18 voorlopig, 4 memecoins met speculatie-oordeel), 19 zonder grade, elk met de reden (datadekking onder
+  40%, met de ontbrekende pijlers). De 10 grootste stablecoins hebben een pegveiligheid.
+- **Elke grade is exact opnieuw te berekenen uit zijn snapshot:** 60 van 60 snapshots herberekend, 60 exact
+  gelijk, inclusief de percentielen uit de opgeslagen groepswaarden.
+- **Elke gate heeft een eigen test:** alle 26 gates van de 16 sjablonen worden elk apart getest (geraakt en
+  niet geraakt). De productgates van grondstoffen volgen in fase 6 met het productoordeel.
+- Een tweede run voegt niets toe (0 feiten, 0 snapshots). Nachtrun crypto inclusief grading: circa
+  2,5 minuten; eerste run vanaf een lege database circa 10 minuten.
+- Tests: 172 voor de rekenserver, 7 voor de webinterface.
+
+### Keuzes en afwijkingen
+
+- **Datadekking per maatstaf**, niet alleen per pijler: een pijler met 2 van de 8 maatstaven telt voor
+  een kwart. Strenger dan de prompt, maar eerlijker; daardoor zijn veel grades nu voorlopig.
+- **Ontbrekende gratis bronnen** (en daardoor de meeste grades voorlopig): unlock-schema's, houders zonder
+  beurzen, reële stakingopbrengst, incidenten en hacks, beheerderssleutels, L2BEAT-fase, ETF-stromen en
+  winst na beloningen. Ze zijn handmatig in te vullen met `set-fact`. RWA-tokens krijgen pas een grade
+  als uitgever, juridische aanspraak en bewaring zijn ingevuld.
+- **Omzet van echte afnemers** (Utility) wordt benaderd met de protocolomzet van DefiLlama; dat staat bij
+  de bron vermeld.
+- **Marktregime** volgt in fase 5; tot dan schuift het regime geen grades.
+- **Memecoins:** de gate "liquiditeit niet vergrendeld" gebruikt het aandeel verbrande of vergrendelde
+  liquiditeit volgens RugCheck, met een instelbare drempel van 50% in het sjabloon.
+- **MiCA-check** op basis van notering bij Coinbase en Bitvavo (beide met MiCA-vergunning volgens mijn
+  kennis van 2025; controleer bij twijfel het ESMA- of AFM-register).
+- **Derivaten:** vanuit de ontwikkelomgeving weigeren Binance-futures en Bybit; OKX levert nu funding en
+  open interest (33 munten, circa drie maanden funding-historie). Op de NAS probeert de app eerst Binance
+  en Bybit.
+- Momentaannames (marktwaarde, orderboek, open interest) worden opgeslagen als waarde van de laatst
+  afgesloten dag; de eerste waarde van een dag telt.
+
 ## Fase 1 – Datalaag (2026-10-11)
 
 ### Gebouwd

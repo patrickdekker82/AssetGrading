@@ -10,6 +10,10 @@ max_grade: C
 label_nl: speculatie
 note_nl: Geen gewogen grade. Alleen een veiligheidscontrole, met liquiditeit en aandacht ter informatie.
 display_metrics: [dex_liquidity, attention_score]
+# How the Solana safety flags are derived from RugCheck. Liquidity counts as locked when at least this share
+# of the pool liquidity is burned or locked; holders exclude known pools and exchanges.
+safety_params:
+  lp_locked_min_pct: 50
 pillars: []
 gates:
   - id: mint_authority

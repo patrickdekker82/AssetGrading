@@ -23,6 +23,23 @@ blocks:
     weight: 10
     measures: [volatility_vs_3y_history]   # penalty when high
 
+# Look-back windows in trading days per asset class (crypto trades every day: 365 per year).
+params:
+  crypto:
+    sma_short: 50
+    sma_long: 200
+    sma_long_rising_lag: 20
+    months_for_10m_average: 10
+    momentum_long: 365
+    momentum_skip: 30
+    momentum_short: 182
+    high_window: 364
+    relative_windows: [91, 182, 365]
+    volatility_window: 90
+    volatility_history: 1095
+    min_block_coverage: 0.5      # technical score is missing when less than half the block weight is available
+    benchmark: bitcoin
+
 rules:
   completed_periods_only: true
   crypto:

@@ -1,0 +1,24 @@
+# Template assignment (chapter 6, "Toewijzing"). First matching rule wins.
+# Crypto: CoinGecko category names (case-insensitive). asset.template_override always wins.
+crypto:
+  overrides:
+    bitcoin: crypto_bitcoin
+    pump-fun: crypto_defi          # launchpad with protocol revenue, not a memecoin
+  rules:
+    - template: crypto_stablecoin
+      any_category: [Stablecoins]
+    - template: crypto_rwa
+      any_category: [Tokenized Assets, Tokenized Gold, Tokenized Treasuries, Tokenized Commodities,
+                     Tokenized Private Credit, Tokenized Treasury Bills]
+    - template: crypto_memecoin
+      any_category: [Meme]
+    - template: crypto_defi
+      any_category: [Decentralized Finance (DeFi), Decentralized Exchange (DEX), Lending/Borrowing Protocols,
+                     Derivatives, Perpetuals]
+    - template: crypto_platform
+      any_category: [Layer 0 (L0), Layer 1 (L1), Layer 2 (L2), Smart Contract Platform]
+  default: crypto_utility
+  # Tags switch metrics and gates with `applies_to` on or off.
+  tags:
+    l2: {any_category: [Layer 2 (L2)]}
+    solana: {alias_kind: "contract:solana"}

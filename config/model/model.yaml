@@ -1,8 +1,8 @@
 # Graadmeter - global model settings.
 # Every change anywhere under config/model/ requires a new `version`
 # and a refreshed entry in versions.lock.yaml (see README, "Modelversie").
-version: "0.1.0"
-description: Startgewichten uit de bouwprompt (hoofdstuk 5 en 6), nog niet geijkt.
+version: "0.2.0"
+description: Startgewichten uit de bouwprompt (hoofdstuk 5 en 6), nog niet geijkt; grading-engine en cryptotoewijzing.
 
 default_horizon_months: [6, 12]
 
@@ -25,6 +25,19 @@ scoring:
 coverage:
   provisional_below: 0.60        # grey grade with label "voorlopig"
   hidden_below: 0.40             # no grade shown
+  # Coverage counts per metric: a pillar with half its metrics filled counts for half its weight.
+  # Metrics that do not apply to an asset (applies_to) are left out of the count.
+
+peers:
+  min_group_size: 8              # smaller comparison groups fall back to a broader group
+  broaden:
+    crypto_platform: crypto_alt
+    crypto_defi: crypto_alt
+    crypto_utility: crypto_alt
+    crypto_rwa: crypto_alt
+  groups:
+    crypto_alt: [crypto_platform, crypto_defi, crypto_utility]
+  own_history_years: 3           # window for the 20% own-history part of valuation metrics
 
 stability:
   hysteresis_points: 2           # letter changes when the bound is crossed by >= 2 points
