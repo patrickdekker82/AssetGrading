@@ -1,0 +1,50 @@
+id: crypto_bitcoin
+name_nl: Bitcoin
+tab: crypto
+grading: weighted
+assign_on: coingecko_category
+peer_group: own_history
+regime_adjust: true
+# Valuation is scored as a percentile of the asset's own history, weighting the latest cycle more.
+own_history:
+  recency_half_life_years: 4
+# Not used as input: stock-to-flow (refuted) and Pi Cycle (missed the last top).
+excluded_metrics: [stock_to_flow, pi_cycle_top]
+note_nl: >-
+  Deze on-chain maatstaven herkenden bodems (2015, 2018, 2022) beter dan toppen;
+  bij de top van oktober 2025 gaf geen ervan een schoon signaal.
+pillars:
+  - id: trend
+    name_nl: Trend
+    weight: 30
+    timing: true
+    metrics: [technical_score]
+  - id: onchain_valuation
+    name_nl: On-chain waardering
+    weight: 25
+    valuation: true
+    metrics:
+      - mvrv_z
+      - nupl
+      - puell_multiple
+      - price_to_realized
+  - id: macro
+    name_nl: Macro
+    weight: 20
+    metrics:
+      - regime_score
+      - real_rate
+      - dollar_index
+  - id: flows
+    name_nl: Liquiditeit en stromen
+    weight: 15
+    metrics:
+      - etf_flows
+      - stablecoin_supply_growth
+  - id: positioning
+    name_nl: Positionering
+    weight: 10
+    metrics:
+      - funding_rate
+      - open_interest_to_mcap
+gates: []

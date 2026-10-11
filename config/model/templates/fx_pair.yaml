@@ -1,0 +1,55 @@
+id: fx_pair
+name_nl: Valutapaar
+tab: fx
+grading: weighted
+assign_on: product_type
+peer_group: fx_pairs
+regime_adjust: false
+# Direction score: long the first currency, short the second. A for EUR/USD means F for USD/EUR.
+mirror_pairs: true
+note_nl: De score is een richtingsscore voor lang de eerste en kort de tweede valuta, geen kwaliteitsoordeel.
+pillars:
+  - id: carry
+    name_nl: Carry
+    weight: 30
+    horizon_months: [1, 12]
+    metrics: [carry_to_vol]
+  - id: momentum
+    name_nl: Momentum
+    weight: 25
+    timing: true
+    horizon_months: [1, 12]
+    metrics: [fx_momentum_3_12m]
+  - id: value
+    name_nl: Waarde
+    weight: 25
+    horizon_months: [12, 60]
+    metrics: [reer_deviation]
+  - id: macro
+    name_nl: Macro
+    weight: 10
+    metrics:
+      - terms_of_trade
+      - current_account
+      - rate_path
+  - id: positioning
+    name_nl: Positionering
+    weight: 10
+    metrics: [cftc_net_position]
+weight_rules:
+  - id: carry_crash_guard
+    when: {metric: fx_vol_or_vix_percentile, op: ">", value: 80}
+    scale_pillar: {pillar: carry, factor: 0.5}
+    reason_nl: Valutavolatiliteit of VIX boven het 80e percentiel; Carry verliest juist bij paniek.
+gates:
+  - id: managed_currency
+    kind: flag
+    flag: pegged_or_capital_controls
+    cap: C
+    reason_nl: Gekoppelde of gestuurde valuta, of kapitaalbeperkingen.
+  - id: no_edge
+    kind: pillar_agreement
+    min_pillars: 2
+    set_grade: C
+    label_nl: geen voordeel
+    reason_nl: Minder dan twee pijlers wijzen dezelfde kant op.

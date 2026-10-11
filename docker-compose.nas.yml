@@ -1,0 +1,13 @@
+# Synology override: use the images built on the Mac (scripts/build-images.sh) instead of building,
+# and keep the database files in a visible folder next to this file.
+#   docker compose -f docker-compose.yml -f docker-compose.nas.yml up -d
+services:
+  db:
+    volumes: !override
+      - ./data/postgres:/var/lib/postgresql/data
+  server:
+    build: !reset null
+    pull_policy: never
+  web:
+    build: !reset null
+    pull_policy: never

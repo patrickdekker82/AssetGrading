@@ -1,0 +1,58 @@
+# Technical score (chapter 7). One formula per asset class, no per-asset tuning.
+# Only trend, momentum and volatility count; oscillators are chart context only.
+blocks:
+  - id: trend_state
+    weight: 35
+    tests:                         # average of four binary tests
+      - price_above_sma200
+      - sma50_above_sma200
+      - price_above_sma_10m
+      - sma200_rising
+  - id: momentum
+    weight: 25
+    measures:                      # volatility-scaled, percentile within class
+      - return_12m_skip_1m
+      - return_6m
+  - id: distance_to_high
+    weight: 15
+    measures: [price_to_52w_high]  # percentile within class
+  - id: relative_strength
+    weight: 15
+    measures: [rel_return_3m, rel_return_6m, rel_return_12m]
+  - id: volatility
+    weight: 10
+    measures: [volatility_vs_3y_history]   # penalty when high
+
+rules:
+  completed_periods_only: true
+  crypto:
+    daily_close_utc: "00:00"
+    days_per_year: 365
+  stocks:
+    adjusted_prices: true
+  commodities:
+    continuous_roll_adjusted: true
+  indices_bonds:
+    total_return_where_available: true
+
+# Default chart indicator sets per class. `score` = used in the technical score,
+# `context` = chart only.
+chart_sets:
+  stocks:
+    score: [sma50, sma200, sma10w, sma40w, mom_12_1, dist_52w_high, rs_index, rs_sector]
+    context: [rsi14, macd_12_26_9, volume_vs_sma50, atr14, bollinger_20_2, vwap_anchored_earnings]
+  crypto:
+    score: [sma20w, ema21w, sma200w, sma50, sma200, mayer_multiple, rs_btc]
+    context: [rsi14_weekly, realized_vol_30d, realized_vol_90d, atr_pct, funding_rate, open_interest]
+  commodities:
+    score: [donchian20, donchian55, sma50, sma100, sma200, mom_12m, curve_slope]
+    context: [adx14, atr20, seasonal_10_15y, cftc_index_3y]
+  fx:
+    score: [ema50, ema200, mom_3_12m, rate_diff_2y]
+    context: [adx14, atr14, ichimoku_9_26_52, cftc_positions]
+  indices_etfs:
+    score: [sma200, sma_10m, drawdown_from_high]
+    context: [breadth, vix, vix_to_vix3m]
+  bonds:
+    score: [yield_trend_inverted, tr_price_trend, mom_per_duration]
+    context: [curve_2s10s, curve_3m10y, move_index]

@@ -1,0 +1,63 @@
+id: etf
+name_nl: ETF
+tab: etfs
+grading: weighted
+assign_on: product_type
+peer_group: same_index
+regime_adjust: false
+note_nl: De grade beoordeelt het product, niet de markt erin. De Timing van de onderliggende index staat los.
+show_underlying_timing: true
+pillars:
+  - id: costs
+    name_nl: Kosten
+    weight: 40
+    metrics:
+      - tracking_difference
+      - {id: ongoing_charges, fallback_for: tracking_difference}
+  - id: tradability
+    name_nl: Verhandelbaarheid
+    weight: 20
+    metrics:
+      - bid_ask_spread
+      - fund_size
+      - daily_turnover
+  - id: structure_tax
+    name_nl: Structuur en fiscaal
+    weight: 20
+    metrics:
+      - domicile_tax_score
+      - replication_score
+      - securities_lending_score
+      - distribution_policy_score
+  - id: survival
+    name_nl: Overlevingskans
+    weight: 10
+    metrics:
+      - fund_size
+      - issuer_score
+      - fund_age
+      - net_flows
+  - id: diversification
+    name_nl: Spreiding
+    weight: 10
+    metrics:
+      - top10_weight
+      - index_breadth
+gates:
+  - id: leveraged_or_inverse
+    kind: flag
+    flag: leveraged_or_inverse
+    cap: D
+    reason_nl: Hefboom- of inverse product.
+  - id: small_fund
+    kind: metric_threshold
+    metric: fund_size
+    op: "<"
+    value: 50000000
+    cap: C
+    reason_nl: Fondsomvang onder 50 miljoen euro.
+  - id: no_kid
+    kind: flag
+    flag: no_eu_kid
+    label_nl: niet verkrijgbaar voor Nederlandse particulieren
+    reason_nl: Er is geen Europees essentiële-informatiedocument (KID).

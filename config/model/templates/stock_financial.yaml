@@ -1,0 +1,49 @@
+id: stock_financial
+name_nl: Bank of verzekeraar
+tab: stocks
+grading: weighted
+assign_on: sector_code
+peer_group: sector
+regime_adjust: true
+note_nl: Schuld is hier grondstof; ondernemingswaarde, vrije kasstroom en Altman Z zijn onbruikbaar.
+pillars:
+  - id: valuation
+    name_nl: Waardering
+    weight: 30
+    valuation: true
+    metrics:
+      - ptbv_vs_rotce
+      - earnings_yield
+      - dividend_yield
+  - id: profitability
+    name_nl: Winstgevendheid
+    weight: 25
+    metrics:
+      - rotce
+      - {id: net_interest_margin, applies_to: [bank]}
+      - {id: cost_income_ratio, applies_to: [bank]}
+      - {id: combined_ratio, applies_to: [insurer]}
+  - id: capital_credit
+    name_nl: Kapitaal en kredietkwaliteit
+    weight: 25
+    metrics:
+      - {id: cet1_buffer, applies_to: [bank]}
+      - {id: npl_ratio, applies_to: [bank]}
+      - {id: npl_coverage, applies_to: [bank]}
+      - {id: loan_to_deposit, applies_to: [bank]}
+      - {id: solvency2_ratio, applies_to: [insurer]}
+  - id: momentum_revisions
+    name_nl: Momentum en revisies
+    weight: 20
+    timing: true
+    metrics:
+      - technical_score
+      - eps_revision_3m
+gates:
+  - id: cet1_thin_buffer
+    kind: metric_threshold
+    metric: cet1_buffer
+    op: "<"
+    value: 1.0
+    cap: C
+    reason_nl: De CET1-ruimte boven de toezichtseis is kleiner dan 1 procentpunt.

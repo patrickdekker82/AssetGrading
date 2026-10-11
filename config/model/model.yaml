@@ -1,0 +1,52 @@
+# Graadmeter - global model settings.
+# Every change anywhere under config/model/ requires a new `version`
+# and a refreshed entry in versions.lock.yaml (see README, "Modelversie").
+version: "0.1.0"
+description: Startgewichten uit de bouwprompt (hoofdstuk 5 en 6), nog niet geijkt.
+
+default_horizon_months: [6, 12]
+
+# Provisional lower bounds per letter (chapter 5). Calibrated per template in phase 8.
+letter_scale:
+  A: 75
+  B: 62
+  C: 45
+  D: 32
+  F: 0
+# Plus and minus split each letter band into thirds. F has no plus/minus.
+plus_minus: thirds
+
+scoring:
+  winsorize: [0.05, 0.95]        # clip outliers at the 5th and 95th percentile before ranking
+  valuation_mix:                 # applied to pillars marked `valuation: true`
+    peer: 0.80
+    own_history: 0.20
+
+coverage:
+  provisional_below: 0.60        # grey grade with label "voorlopig"
+  hidden_below: 0.40             # no grade shown
+
+stability:
+  hysteresis_points: 2           # letter changes when the bound is crossed by >= 2 points
+  hysteresis_days: 5             # ... or stays across the bound for 5 trading days
+  band_weight_shift: 0.20        # bandwidth: every weight +/- 20%
+
+regime:
+  states: [risk_on, neutral, risk_off]
+  inputs:
+    world_index_vs_10m_ma: {series: world_index, ma_months: 10}
+    high_yield_spread: {source: FRED, series: BAMLH0A0HYM2}
+    vix_percentile: {series: VIX, lookback_years: 10}
+  max_grade_shift_steps: 1       # regime moves stock and crypto grades at most one step
+  applies_to_tabs: [stocks, crypto]
+  overrides_gates: false         # never
+
+etf_tax:
+  # Withholding tax on US dividends by fund domicile. NL treatment not verified (chapter 6).
+  withholding_us_dividends:
+    IE: 0.15
+    LU: 0.30
+    NL: null
+  distribution_preference: accumulating   # instelbaar: accumulating | distributing | none
+
+forbidden_words_nl: [kopen, verkopen, koersdoel]

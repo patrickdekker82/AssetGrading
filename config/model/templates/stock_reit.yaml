@@ -1,0 +1,50 @@
+id: stock_reit
+name_nl: Vastgoedfonds (REIT)
+tab: stocks
+grading: weighted
+assign_on: sector_code
+peer_group: property_type
+regime_adjust: true
+note_nl: Afschrijving vertekent de winst; er wordt gerekend met FFO en AFFO.
+pillars:
+  - id: valuation
+    name_nl: Waardering
+    weight: 25
+    valuation: true
+    metrics:
+      - price_to_affo
+      - nav_premium
+      - cap_rate_spread
+  - id: balance
+    name_nl: Balans
+    weight: 25
+    metrics:
+      - net_debt_to_ebitda
+      - loan_to_value
+      - debt_maturity
+      - fixed_rate_share
+      - interest_coverage
+  - id: operations
+    name_nl: Operationeel
+    weight: 20
+    metrics:
+      - occupancy
+      - same_store_rent_growth
+      - walt
+  - id: dividend_safety
+    name_nl: Dividendveiligheid
+    weight: 15
+    metrics: [payout_to_affo]
+  - id: momentum
+    name_nl: Momentum
+    weight: 15
+    timing: true
+    metrics: [technical_score]
+gates:
+  - id: payout_above_affo
+    kind: metric_threshold
+    metric: payout_to_affo
+    op: ">"
+    value: 1.0
+    cap: C
+    reason_nl: De uitkering is hoger dan 100% van de AFFO.

@@ -1,0 +1,36 @@
+id: index
+name_nl: Index
+tab: indices
+grading: weighted
+assign_on: product_type
+peer_group: own_history
+regime_adjust: false
+note_nl: Deze gewichten zijn een eigen voorstel; voor indices is geen gepubliceerde weging gevonden.
+pillars:
+  - id: trend
+    name_nl: Trend
+    weight: 30
+    timing: true
+    metrics: [technical_score]
+  - id: valuation
+    name_nl: Waardering
+    weight: 25
+    valuation: true
+    metrics:
+      - earnings_yield_minus_real_rate
+      - cape_vs_history
+  - id: macro
+    name_nl: Macro
+    weight: 20
+    metrics:
+      - regime_score
+      - yield_curve_slope
+  - id: breadth
+    name_nl: Marktbreedte
+    weight: 15
+    metrics: [pct_above_sma200]
+  - id: volatility
+    name_nl: Volatiliteit
+    weight: 10
+    metrics: [volatility_vs_history]
+gates: []

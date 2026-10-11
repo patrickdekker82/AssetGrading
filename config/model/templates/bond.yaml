@@ -1,0 +1,41 @@
+id: bond
+name_nl: Obligatie
+tab: bonds
+grading: weighted
+assign_on: product_type
+peer_group: bond_category
+regime_adjust: false
+# Starting yield predicts five-year returns well, one-year returns only moderately.
+horizon_months: [60]
+note_nl: Een hoog rendement wordt nooit beoordeeld zonder het verwachte wanbetalingsverlies eraf te trekken.
+pillars:
+  - id: yield
+    name_nl: Rendement
+    weight: 35
+    metrics:
+      - expected_net_yield
+      - {id: real_yield, applies_to: [government]}
+  - id: credit
+    name_nl: Kredietkwaliteit
+    weight: 20
+    metrics:
+      - rating_quality
+      - spread_per_default_risk
+  - id: rate_risk
+    name_nl: Renterisico
+    weight: 20
+    metrics:
+      - duration
+      - yield_per_duration
+      - curve_position_score
+  - id: cost_liquidity
+    name_nl: Kosten en liquiditeit
+    weight: 15
+    metrics:
+      - tracking_difference
+      - bid_ask_spread
+  - id: diversification
+    name_nl: Spreiding
+    weight: 10
+    metrics: [issuer_concentration]
+gates: []

@@ -1,0 +1,18 @@
+id: crypto_stablecoin
+name_nl: Stablecoin
+tab: crypto
+grading: peg_safety
+assign_on: coingecko_category
+peer_group: crypto_subtype
+regime_adjust: false
+note_nl: Geen beleggingsgrade. Pegveiligheid van 1 (sterk) tot 5 (zwak).
+peg_safety:
+  scale: [1, 5]
+  factors:
+    - reserve_quality
+    - redeemability
+    - governance_score
+    - mica_status
+    - peg_deviation
+pillars: []
+gates: []

@@ -1,0 +1,67 @@
+id: commodity
+name_nl: Grondstof
+tab: commodities
+grading: weighted
+assign_on: product_type
+peer_group: commodity_class
+regime_adjust: false
+note_nl: >-
+  Een particulier kan geen spot-grondstof aanhouden; daarom twee oordelen: de grondstof zelf
+  en het product (ETC). Seizoenspatronen staan alleen in de grafiek.
+pillars:
+  - id: carry
+    name_nl: Carry
+    weight: 30
+    metrics: [curve_slope_annualized]
+  - id: trend
+    name_nl: Trend
+    weight: 25
+    timing: true
+    metrics: [technical_score]
+  - id: fundamentals
+    name_nl: Fundamentals
+    weight: 15
+    metrics: [inventory_vs_seasonal]
+  - id: macro
+    name_nl: Macro
+    weight: 15
+    metrics:
+      - dollar_index
+      - real_rate
+  - id: positioning
+    name_nl: Positionering
+    weight: 10
+    metrics: [cftc_speculator_change]
+  - id: basis_momentum
+    name_nl: Basis-momentum
+    weight: 5
+    metrics: [basis_momentum]
+gates: []
+product:
+  name_nl: Productoordeel (ETC)
+  note_nl: Gelijke weging van de maatstaven is een eigen voorstel.
+  metrics:
+    - replication_physical
+    - collateral_score
+    - ongoing_charges
+    - roll_yield_12m
+    - tracking_difference
+    - bid_ask_spread
+  gates:
+    - id: roll_loss
+      kind: metric_threshold
+      metric: roll_yield_12m
+      op: "<"
+      value: -0.10
+      cap: C
+      reason_nl: Het rolverlies is slechter dan 10% per jaar.
+    - id: leveraged_or_inverse
+      kind: flag
+      flag: leveraged_or_inverse
+      cap: D
+      reason_nl: Hefboom- of inverse product.
+    - id: uncollateralized
+      kind: flag
+      flag: uncollateralized_note
+      cap: B-
+      reason_nl: Schuldpapier zonder onderpand.

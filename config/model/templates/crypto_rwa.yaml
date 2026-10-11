@@ -1,0 +1,36 @@
+id: crypto_rwa
+name_nl: RWA-token
+tab: crypto
+grading: weighted
+assign_on: coingecko_category
+peer_group: crypto_subtype
+regime_adjust: false
+note_nl: Deze gewichten zijn een eigen voorstel.
+pillars:
+  - id: issuer_legal
+    name_nl: Uitgever en juridische aanspraak
+    weight: 30
+    metrics:
+      - issuer_score
+      - legal_claim_score
+  - id: custody_redemption
+    name_nl: Bewaring en inwisseling
+    weight: 25
+    metrics:
+      - custodian_score
+      - redemption_score
+  - id: underlying
+    name_nl: Kwaliteit van het onderliggende
+    weight: 25
+    metrics: [underlying_grade_score]
+  - id: liquidity
+    name_nl: Liquiditeit
+    weight: 10
+    metrics:
+      - regulated_volume
+      - bid_ask_spread
+  - id: costs
+    name_nl: Kosten
+    weight: 10
+    metrics: [management_fee]
+gates: []

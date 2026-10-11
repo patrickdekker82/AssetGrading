@@ -1,0 +1,70 @@
+# Tabs and default lists (chapter 2). `size` is one of `size_options`.
+# Static member lists are added in the phase that builds each asset class.
+size_options: [25, 50, 100]
+
+tabs:
+  - slug: crypto
+    label_nl: Crypto
+    phase: 1
+    size: 50
+    source: market_cap_rank
+    description_nl: Top op marktkapitalisatie, zonder stablecoins en wrapped of staked varianten.
+    excluded_filters: [stablecoin, wrapped, staked]   # shown in their own filters
+    templates: [crypto_bitcoin, crypto_platform, crypto_defi, crypto_utility, crypto_stablecoin, crypto_memecoin, crypto_rwa]
+  - slug: stocks
+    label_nl: Aandelen
+    phase: 4
+    size: 50
+    source: market_cap_rank
+    extra_lists: [aex]
+    description_nl: Top Amerikaanse aandelen op marktkapitalisatie plus de 25 AEX-fondsen.
+    filters: [sector, country]
+    templates: [stock_general, stock_financial, stock_reit]
+  - slug: etfs
+    label_nl: ETF's
+    phase: 5
+    size: 50
+    source: static_list
+    description_nl: Circa 40 UCITS-ETF's, gegroepeerd per index. Alleen ETF's op dezelfde index worden met elkaar vergeleken.
+    group_by: index
+    templates: [etf]
+  - slug: commodities
+    label_nl: Grondstoffen
+    phase: 6
+    size: 25
+    source: static_list
+    description_nl: Edelmetalen, energie, industriemetalen en landbouw, met het product waarmee je ze kunt volgen.
+    templates: [commodity, precious_metal]
+  - slug: fx
+    label_nl: Valuta
+    phase: 6
+    size: 25
+    source: static_list
+    description_nl: EUR-paren en de grote dollarparen. De score is een richtingsscore, geen kwaliteitsoordeel.
+    templates: [fx_pair]
+  - slug: bonds
+    label_nl: Obligaties
+    phase: 5
+    size: 25
+    source: static_list
+    description_nl: Obligatie-ETF's en staatsrentes.
+    templates: [bond]
+  - slug: indices
+    label_nl: Indices
+    phase: 5
+    size: 25
+    source: static_list
+    description_nl: Wereldwijde indices. Bepalen ook het marktregime voor de andere tabs.
+    templates: [index]
+  - slug: watchlist
+    label_nl: Volglijst
+    phase: 7
+    source: user_selection
+    description_nl: Eigen selectie over alle klassen.
+    templates: []
+  - slug: model
+    label_nl: Model
+    phase: 8
+    source: none
+    description_nl: Hoe goed het gradingmodel zelf presteert, live gescheiden van de terugtest.
+    templates: []

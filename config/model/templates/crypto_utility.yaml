@@ -1,0 +1,78 @@
+id: crypto_utility
+name_nl: Utility (AI, DePIN en overig)
+tab: crypto
+grading: weighted
+assign_on: coingecko_category
+peer_group: crypto_subtype
+regime_adjust: true
+show_btc_relative: true
+note_nl: Bij Utility gaat het gewicht van Aandacht naar Tokenomics, omdat emissies daar het grootste risico zijn.
+pillars:
+  - id: tokenomics
+    name_nl: Tokenomics en aanbod
+    weight: 30
+    metrics:
+      - mcap_to_fdv
+      - unlock_30d
+      - unlock_90d
+      - unlock_365d
+      - net_inflation
+      - real_staking_yield
+      - holders_top10_ex_exchanges
+      - holders_top100_ex_exchanges
+  - id: fundamentals
+    name_nl: Fundamentals en waardeopbouw
+    weight: 20
+    metrics:
+      - real_customer_revenue
+  - id: trend
+    name_nl: Trend
+    weight: 20
+    timing: true
+    metrics: [technical_score]
+  - id: security
+    name_nl: Veiligheid en decentralisatie
+    weight: 10
+    metrics:
+      - audit_score
+      - incident_score
+      - admin_key_risk
+  - id: valuation
+    name_nl: Waardering
+    weight: 10
+    valuation: true
+    metrics:
+      - mcap_to_active_addresses
+      - mcap_to_fees
+  - id: liquidity
+    name_nl: Liquiditeit
+    weight: 10
+    metrics:
+      # Volume from unregulated exchanges is never used (on average >70% wash trading measured).
+      - regulated_volume
+      - orderbook_depth_2pct
+gates:
+  - id: insider_unlock_90d
+    kind: metric_threshold
+    metric: unlock_insiders_90d
+    op: ">"
+    value: 0.10
+    cap: C
+    reason_nl: Meer dan 10% van het aanbod komt binnen 90 dagen vrij voor team of investeerders.
+  - id: low_float
+    kind: metric_threshold
+    metric: mcap_to_fdv
+    op: "<"
+    value: 0.2
+    cap: B-
+    reason_nl: Marktkapitalisatie gedeeld door FDV ligt onder 0,2; er komt nog veel aanbod bij.
+  - id: unresolved_exploit
+    kind: flag
+    flag: unresolved_exploit
+    cap: D
+    reason_nl: Er is een onopgeloste hack of exploit.
+  - id: no_mica_venue
+    kind: flag
+    flag: not_on_mica_venue
+    cap: C
+    reason_nl: Niet verhandelbaar bij een aanbieder met MiCA-vergunning.

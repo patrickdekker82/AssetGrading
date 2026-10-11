@@ -1,0 +1,78 @@
+id: stock_general
+name_nl: Aandeel algemeen
+tab: stocks
+grading: weighted
+assign_on: sector_code
+peer_group: sector
+regime_adjust: true
+pillars:
+  - id: quality
+    name_nl: Kwaliteit
+    weight: 25
+    metrics:
+      - gross_profit_to_assets
+      - roic
+      - margin_stability
+      - piotroski_f
+      - accruals
+      - asset_growth
+  - id: value
+    name_nl: Waarde
+    weight: 20
+    valuation: true
+    metrics:
+      - ebit_to_ev
+      - fcf_yield
+      - forward_earnings_yield
+      - shareholder_yield
+  - id: momentum
+    name_nl: Momentum
+    weight: 20
+    timing: true
+    metrics: [technical_score]
+  - id: safety
+    name_nl: Veiligheid
+    weight: 15
+    metrics:
+      - beta
+      - volatility
+      - net_debt_to_ebitda
+      - interest_coverage
+      - altman_z
+  - id: revisions
+    name_nl: Revisies en sentiment
+    weight: 10
+    metrics:
+      - eps_revision_1m
+      - eps_revision_3m
+      # Earnings surprise counts lightly: the effect has largely disappeared for large caps since 2006.
+      - {id: earnings_surprise, weight: 0.5}
+      - short_interest
+      - insider_buying
+  - id: growth
+    name_nl: Groei
+    weight: 10
+    metrics:
+      - revenue_growth
+      - earnings_growth
+      - growth_consistency
+gates:
+  - id: beneish_manipulation
+    kind: metric_threshold
+    metric: beneish_m
+    op: ">"
+    value: -1.78
+    cap: C
+    reason_nl: Beneish M-score boven -1,78 wijst op mogelijk geflatteerde cijfers.
+  - id: altman_distress
+    kind: metric_threshold
+    metric: altman_z
+    op: "<"
+    value: 1.81
+    cap: C
+    reason_nl: Altman Z-score onder 1,81 wijst op verhoogd faillissementsrisico.
+  - id: weak_pillar
+    kind: pillar_floor
+    threshold: 20
+    cap: B-
+    reason_nl: Minstens één pijler valt in het laagste vijfde deel van de vergelijkingsgroep.

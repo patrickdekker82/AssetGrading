@@ -1,0 +1,535 @@
+# Woordenlijst - de enige bron voor tooltips in de interface.
+# `terms`: algemene begrippen. `metrics`: elke maatstaf uit config/model/metrics.yaml.
+# Houd uitleg kort en in gewone taal; geen beleggingsadvies.
+
+terms:
+  grade:
+    label: Grade
+    uitleg: Een letter van A+ tot F die aangeeft waar een asset staat in de ranglijst van zijn eigen klasse. Een rangorde, geen voorspelling.
+  score:
+    label: Score
+    uitleg: Een getal van 0 tot 100 waaruit de grade volgt. Hoger betekent beter binnen de vergelijkingsgroep.
+  kwaliteit:
+    label: Kwaliteit
+    uitleg: Deelscore uit alle pijlers behalve trend en momentum. Zegt iets over de asset zelf, los van het moment.
+  timing:
+    label: Timing
+    uitleg: Deelscore uit de technische analyse (trend, momentum, volatiliteit). Zegt iets over het moment, niet over de asset.
+  datadekking:
+    label: Datadekking
+    uitleg: Welk deel van het model met echte data gevuld kon worden. Onder 60% is de grade voorlopig, onder 40% tonen we geen grade.
+  voorlopig:
+    label: Voorlopig
+    uitleg: De datadekking ligt onder 60%. De grade is minder betrouwbaar en wordt grijs getoond.
+  pijler:
+    label: Pijler
+    uitleg: Een groep maatstaven die samen één kant van een asset meten, zoals waardering of veiligheid. Elke pijler heeft een gewicht.
+  gewicht:
+    label: Gewicht
+    uitleg: Hoe zwaar een pijler meetelt in de eindscore. De gewichten per sjabloon tellen op tot 100.
+  maatstaf:
+    label: Maatstaf
+    uitleg: Eén meetbaar getal, zoals vrije-kasstroomrendement of volatiliteit.
+  percentiel:
+    label: Percentiel
+    uitleg: Positie ten opzichte van vergelijkbare assets op een schaal van 0 tot 100. Percentiel 80 betekent beter dan 80% van de groep.
+  vergelijkingsgroep:
+    label: Vergelijkingsgroep
+    uitleg: De assets waarmee vergeleken wordt, zoals dezelfde sector bij aandelen of dezelfde index bij ETF's.
+  gate:
+    label: Gate
+    uitleg: Een harde regel die de grade begrenst, bijvoorbeeld hoogstens C bij verhoogd faillissementsrisico. Een gate wint altijd van de gewogen score.
+  hysterese:
+    label: Hysterese
+    uitleg: De letter verandert pas als de score een grens met minstens 2 punten passeert of er 5 handelsdagen overheen blijft. Dat voorkomt heen-en-weer springen.
+  bandbreedte:
+    label: Bandbreedte
+    uitleg: Het bereik van de grade als elk gewicht 20% hoger of lager zou zijn. Een smalle band betekent een stevige grade.
+  marktregime:
+    label: Marktregime
+    uitleg: Een dagelijkse stand (risico aan, neutraal, risico uit) op basis van de wereldindex, de renteopslag op high-yield-obligaties en de VIX.
+  modelversie:
+    label: Modelversie
+    uitleg: Het versienummer van de gebruikte instellingen (pijlers, gewichten, gates). Elke wijziging geeft een nieuwe versie.
+  peildatum:
+    label: Peildatum
+    uitleg: De datum van de data waarop de grade berekend is.
+  horizon:
+    label: Horizon
+    uitleg: De periode waarvoor de grade bedoeld is, meestal 6 tot 12 maanden.
+  sjabloon:
+    label: Sjabloon
+    uitleg: Het beoordelingsmodel voor een soort asset. Een bank wordt anders beoordeeld dan een REIT of Bitcoin; er zijn 16 sjablonen.
+  technische_score:
+    label: Technische score
+    uitleg: Score uit trendstand, momentum, afstand tot de 52-weekse top, relatieve sterkte en volatiliteit.
+  terugtest:
+    label: Terugtest
+    uitleg: Het model toegepast op het verleden met alleen data die toen beschikbaar was. Geen behaald resultaat.
+  rangcorrelatie:
+    label: Rangcorrelatie
+    uitleg: Hoe goed de volgorde van de scores past bij de volgorde van latere rendementen. 0 is geen verband, 1 is perfect; 0,02 tot 0,06 is al goed.
+  benchmark:
+    label: Benchmark
+    uitleg: De maatstaf waartegen een asset wordt afgezet, bijvoorbeeld een wereldindex of Bitcoin.
+  eur_koers:
+    label: Koers in euro
+    uitleg: Omgerekend met de referentiekoersen van de ECB. De oorspronkelijke valuta staat erbij.
+  regime_risico_aan:
+    label: Risico aan
+    uitleg: De markt is in een gunstige stand; trend en kredietopslagen zijn rustig.
+  regime_risico_uit:
+    label: Risico uit
+    uitleg: De markt is gespannen; trend, kredietopslagen of VIX wijzen op stress.
+  speculatie:
+    label: Speculatie
+    uitleg: Label voor memecoins. Er is geen onderbouwde waardering mogelijk; alleen een veiligheidscontrole.
+  pegveiligheid:
+    label: Pegveiligheid
+    uitleg: Bij stablecoins een cijfer van 1 (sterk) tot 5 (zwak) voor de kans dat de koppeling aan 1,00 houdt.
+  etc:
+    label: ETC
+    uitleg: Exchange traded commodity, een beursgenoteerd product waarmee je een grondstof kunt volgen.
+  ucits:
+    label: UCITS
+    uitleg: Europese regels voor beleggingsfondsen. UCITS-ETF's zijn verkrijgbaar voor Nederlandse particulieren.
+  kid:
+    label: KID
+    uitleg: Essentiële-informatiedocument. Zonder Europees KID mag een fonds niet aan Nederlandse particulieren worden aangeboden.
+  mica:
+    label: MiCA
+    uitleg: Europese wet voor cryptoaanbieders. Een aanbieder met MiCA-vergunning staat onder toezicht.
+  fdv:
+    label: FDV
+    uitleg: Fully diluted value, de waarde als alle tokens die ooit kunnen bestaan al in omloop zouden zijn.
+  contango:
+    label: Contango
+    uitleg: Latere termijncontracten zijn duurder dan nabije. Wie doorrolt, verliest daarop.
+  backwardation:
+    label: Backwardation
+    uitleg: Latere termijncontracten zijn goedkoper dan nabije. Wie doorrolt, verdient daarop.
+  carry:
+    label: Carry
+    uitleg: De opbrengst als de prijs gelijk blijft, zoals renteverschil bij valuta of rolopbrengst bij grondstoffen.
+  rangnummer:
+    label: Rang
+    uitleg: Positie in de ranglijst van deze tab, op volgorde van score.
+
+metrics:
+  accruals:
+    label: "Accruals"
+    uitleg: "Verschil tussen boekhoudwinst en kasstroom. Laag is beter; veel winst zonder kasstroom is een waarschuwing."
+  active_addresses:
+    label: "Actieve adressen"
+    uitleg: "Aantal adressen dat het netwerk daadwerkelijk gebruikt."
+  admin_key_risk:
+    label: "Beheerderssleutels"
+    uitleg: "Risico dat een kleine groep het protocol kan aanpassen of stilleggen. Laag is beter."
+  altman_z:
+    label: "Altman Z-score"
+    uitleg: "Formule voor faillissementsrisico. Onder 1,81 is het risico verhoogd."
+  asset_growth:
+    label: "Balansgroei"
+    uitleg: "Groei van het totaal aan bezittingen. Snel uitdijende balansen leverden historisch lagere rendementen op."
+  attention_score:
+    label: "Aandacht"
+    uitleg: "Zoek- en sociale belangstelling ten opzichte van vergelijkbare tokens."
+  audit_score:
+    label: "Audits"
+    uitleg: "Aantal en kwaliteit van onafhankelijke codecontroles."
+  basis_momentum:
+    label: "Basis-momentum"
+    uitleg: "Verschil in koersbeweging tussen het eerste en tweede termijncontract."
+  beneish_m:
+    label: "Beneish M-score"
+    uitleg: "Formule die geflatteerde cijfers opspoort. Boven -1,78 is dat risico verhoogd."
+  beta:
+    label: "Bèta"
+    uitleg: "Hoe sterk de koers meebeweegt met de markt. 1 is even sterk; lager is rustiger."
+  bid_ask_spread:
+    label: "Spread"
+    uitleg: "Verschil tussen bied- en laatprijs. Kosten die je betaalt bij elke transactie."
+  cap_rate_spread:
+    label: "Aanvangsrendement min staatsrente"
+    uitleg: "Huuropbrengst op de vastgoedwaarde min de rente op staatsleningen."
+  cape_vs_history:
+    label: "CAPE t.o.v. historie"
+    uitleg: "Koers gedeeld door de gemiddelde winst over tien jaar, vergeleken met de eigen historie."
+  carry_to_vol:
+    label: "Carry per risico"
+    uitleg: "Renteverschil tussen twee valuta gedeeld door de volatiliteit."
+  central_bank_purchases:
+    label: "Aankopen centrale banken"
+    uitleg: "Netto goudaankopen door centrale banken."
+  cet1_buffer:
+    label: "CET1-ruimte"
+    uitleg: "Hoeveel procentpunt het kernkapitaal van de bank boven de toezichtseis ligt."
+  cftc_net_position:
+    label: "CFTC-positie"
+    uitleg: "Netto positie van speculanten volgens het wekelijkse CFTC-rapport."
+  cftc_speculator_change:
+    label: "Verandering CFTC-posities"
+    uitleg: "Verandering in de netto positie van speculanten volgens het CFTC-rapport."
+  collateral_score:
+    label: "Onderpand"
+    uitleg: "Of en hoe het product gedekt is door onderpand."
+  combined_ratio:
+    label: "Combined ratio"
+    uitleg: "Schades plus kosten gedeeld door premies bij een verzekeraar. Onder 100% is winstgevend."
+  cost_income_ratio:
+    label: "Kosten/baten"
+    uitleg: "Kosten gedeeld door opbrengsten bij een bank. Lager is efficiënter."
+  current_account:
+    label: "Lopende rekening"
+    uitleg: "Saldo van handel en inkomen met het buitenland als deel van het bbp."
+  curve_position_score:
+    label: "Plek op de rentecurve"
+    uitleg: "Hoe aantrekkelijk de looptijd is gegeven de vorm van de rentecurve."
+  curve_slope_annualized:
+    label: "Helling termijncurve"
+    uitleg: "Prijsverschil tussen nabije en verre termijncontracten op jaarbasis. Positief (backwardation) is gunstig."
+  custodian_score:
+    label: "Bewaarder"
+    uitleg: "Kwaliteit en toezicht van de partij die de onderliggende bezittingen bewaart."
+  daily_turnover:
+    label: "Dagomzet"
+    uitleg: "Gemiddelde verhandelde waarde per dag."
+  debt_maturity:
+    label: "Looptijd schuld"
+    uitleg: "Gemiddelde resterende looptijd van de leningen."
+  developer_activity:
+    label: "Ontwikkelaars"
+    uitleg: "Activiteit van ontwikkelaars aan de code van het project."
+  dex_liquidity:
+    label: "DEX-liquiditeit"
+    uitleg: "Beschikbare liquiditeit op gedecentraliseerde beurzen."
+  distribution_policy_score:
+    label: "Uitkeringsbeleid"
+    uitleg: "Uitkerend of herbeleggend, gescoord volgens de instelling onder Instellingen."
+  dividend_yield:
+    label: "Dividendrendement"
+    uitleg: "Jaarlijks dividend gedeeld door de koers."
+  dollar_index:
+    label: "Dollarindex"
+    uitleg: "Waarde van de dollar tegenover andere grote valuta. Een sterke dollar drukt grondstoffen en crypto."
+  domicile_tax_score:
+    label: "Domicilie"
+    uitleg: "Fiscale gevolgen van het vestigingsland van het fonds, zoals dividendbelasting."
+  duration:
+    label: "Duration"
+    uitleg: "Gevoeligheid voor renteveranderingen in jaren. Bij duration 7 daalt de koers ongeveer 7% als de rente 1 procentpunt stijgt."
+  earnings_after_incentives:
+    label: "Winst na beloningen"
+    uitleg: "Omzet van het protocol min de tokens die het uitdeelt als beloning."
+  earnings_growth:
+    label: "Winstgroei"
+    uitleg: "Groei van de winst per aandeel."
+  earnings_surprise:
+    label: "Winstverrassing"
+    uitleg: "Verschil tussen gerapporteerde en verwachte winst. Telt licht mee."
+  earnings_yield:
+    label: "Winstrendement"
+    uitleg: "Winst gedeeld door koers; het omgekeerde van de koers-winstverhouding."
+  earnings_yield_minus_real_rate:
+    label: "Winstrendement min reële rente"
+    uitleg: "Extra opbrengst van aandelen boven de rente na inflatie."
+  ebit_to_ev:
+    label: "EBIT/EV"
+    uitleg: "Bedrijfswinst gedeeld door de ondernemingswaarde (beurswaarde plus nettoschuld). Hoger is goedkoper."
+  eps_revision_1m:
+    label: "Winstrevisie 1 maand"
+    uitleg: "Verandering in de winstverwachting van analisten over de laatste maand."
+  eps_revision_3m:
+    label: "Winstrevisie 3 maanden"
+    uitleg: "Verandering in de winstverwachting van analisten over de laatste drie maanden."
+  etf_flows:
+    label: "ETF-stromen"
+    uitleg: "Geld dat netto in of uit beursfondsen op deze asset stroomt."
+  expected_net_yield:
+    label: "Verwacht netto rendement"
+    uitleg: "Effectief rendement min verwacht verlies door wanbetaling en kosten."
+  fcf_yield:
+    label: "Vrije-kasstroomrendement"
+    uitleg: "Vrije kasstroom gedeeld door beurswaarde."
+  fixed_rate_share:
+    label: "Vastrentend deel"
+    uitleg: "Deel van de schuld met een vaste rente."
+  forward_earnings_yield:
+    label: "Verwacht winstrendement"
+    uitleg: "Verwachte winst gedeeld door koers."
+  fund_age:
+    label: "Leeftijd fonds"
+    uitleg: "Aantal jaren dat het fonds bestaat."
+  fund_size:
+    label: "Fondsomvang"
+    uitleg: "Belegd vermogen in euro. Kleine fondsen worden vaker opgeheven."
+  funding_rate:
+    label: "Funding rate"
+    uitleg: "Periodieke betaling tussen kopers en verkopers van perpetual futures. Hoog betekent veel optimisme met geleend geld."
+  fx_momentum_3_12m:
+    label: "Momentum 3-12 maanden"
+    uitleg: "Koersverandering van het valutapaar over 3 tot 12 maanden."
+  fx_vol_or_vix_percentile:
+    label: "Volatiliteit of VIX percentiel"
+    uitleg: "De hoogste van valutavolatiliteit en VIX als percentiel van de eigen historie."
+  governance_score:
+    label: "Bestuur"
+    uitleg: "Kwaliteit van bestuur, transparantie en toezicht van de uitgever."
+  gross_profit_to_assets:
+    label: "Brutowinst/activa"
+    uitleg: "Brutowinst gedeeld door totale bezittingen. Een robuuste maat voor winstgevendheid."
+  growth_consistency:
+    label: "Bestendigheid groei"
+    uitleg: "Hoe regelmatig omzet en winst groeiden over meerdere jaren."
+  holder_payout:
+    label: "Uitkering aan houders"
+    uitleg: "Deel van de omzet dat via terugkoop of verbranding naar tokenhouders gaat."
+  holders_top10:
+    label: "Top 10 houders"
+    uitleg: "Deel van het aanbod in handen van de tien grootste adressen."
+  holders_top100_ex_exchanges:
+    label: "Top 100 houders"
+    uitleg: "Deel van het aanbod bij de honderd grootste houders, zonder beurzen."
+  holders_top10_ex_exchanges:
+    label: "Top 10 houders"
+    uitleg: "Deel van het aanbod bij de tien grootste houders, zonder beurzen."
+  incident_score:
+    label: "Incidenten"
+    uitleg: "Geschiedenis van hacks, exploits en storingen. Hoger is schoner."
+  index_breadth:
+    label: "Breedte index"
+    uitleg: "Aantal posities in de index."
+  insider_buying:
+    label: "Aankopen bestuurders"
+    uitleg: "Niet-routinematige aankopen van eigen aandelen door bestuurders."
+  interest_coverage:
+    label: "Rentedekking"
+    uitleg: "Bedrijfswinst gedeeld door rentelasten. Hoger is veiliger."
+  inventory_vs_seasonal:
+    label: "Voorraden t.o.v. seizoen"
+    uitleg: "Voorraden vergeleken met het gemiddelde voor deze tijd van het jaar. Lage voorraden zijn gunstig voor de prijs."
+  issuer_concentration:
+    label: "Concentratie uitgevers"
+    uitleg: "Deel van het fonds bij de grootste uitgevers van obligaties."
+  issuer_score:
+    label: "Uitgever"
+    uitleg: "Omvang en betrouwbaarheid van de uitgever."
+  l2beat_stage:
+    label: "L2BEAT-fase"
+    uitleg: "Volwassenheid van een layer-2 volgens L2BEAT (fase 0 tot 2)."
+  legal_claim_score:
+    label: "Juridische aanspraak"
+    uitleg: "Welk recht de tokenhouder heeft op de onderliggende waarde."
+  loan_to_deposit:
+    label: "Leningen/deposito's"
+    uitleg: "Uitgezette leningen gedeeld door spaargeld. Te hoog maakt een bank afhankelijk van de kapitaalmarkt."
+  loan_to_value:
+    label: "Loan-to-value"
+    uitleg: "Schuld als deel van de vastgoedwaarde."
+  management_fee:
+    label: "Beheerkosten"
+    uitleg: "Jaarlijkse kosten van het product."
+  margin_stability:
+    label: "Stabiliteit marges"
+    uitleg: "Hoe weinig de winstmarge schommelt over de jaren."
+  mcap_to_active_addresses:
+    label: "Waarde per actief adres"
+    uitleg: "Marktkapitalisatie gedeeld door het aantal actieve adressen."
+  mcap_to_fdv:
+    label: "Marktwaarde/FDV"
+    uitleg: "Deel van alle toekomstige tokens dat al in omloop is. Laag betekent veel toekomstig aanbod."
+  mcap_to_fees:
+    label: "Waarde/fees"
+    uitleg: "Marktkapitalisatie gedeeld door jaarlijkse fees, vergelijkbaar met een koers-omzetverhouding."
+  mica_status:
+    label: "MiCA-status"
+    uitleg: "Of de uitgever een vergunning onder de Europese cryptowet heeft."
+  mvrv_z:
+    label: "MVRV Z-score"
+    uitleg: "Hoe ver de marktwaarde boven de gerealiseerde waarde (gemiddelde aankoopprijs) ligt."
+  nav_premium:
+    label: "Premie op intrinsieke waarde"
+    uitleg: "Hoeveel de koers boven de getaxeerde waarde van het vastgoed min schuld ligt."
+  net_debt_to_ebitda:
+    label: "Nettoschuld/EBITDA"
+    uitleg: "Aantal jaren bedrijfskasstroom nodig om de schuld af te lossen."
+  net_flows:
+    label: "Instroom"
+    uitleg: "Netto geld dat in het fonds stroomt."
+  net_inflation:
+    label: "Netto-inflatie"
+    uitleg: "Jaarlijkse groei van het tokenaanbod na verbranding."
+  net_interest_margin:
+    label: "Rentemarge"
+    uitleg: "Verschil tussen ontvangen en betaalde rente als deel van de bezittingen."
+  npl_coverage:
+    label: "Dekking probleemleningen"
+    uitleg: "Voorzieningen gedeeld door probleemleningen."
+  npl_ratio:
+    label: "Probleemleningen"
+    uitleg: "Deel van de leningen waarop niet volgens afspraak wordt betaald."
+  nupl:
+    label: "NUPL"
+    uitleg: "Netto ongerealiseerde winst of verlies van alle houders als deel van de marktwaarde."
+  occupancy:
+    label: "Bezettingsgraad"
+    uitleg: "Deel van het vastgoed dat verhuurd is, vergeleken binnen hetzelfde vastgoedtype."
+  ongoing_charges:
+    label: "Lopende kosten"
+    uitleg: "Jaarlijkse kosten van het fonds (TER). Alleen gebruikt als het werkelijke verschil met de index ontbreekt."
+  open_interest_to_mcap:
+    label: "Open interest"
+    uitleg: "Waarde van openstaande futures gedeeld door de marktwaarde. Hoog betekent veel hefboom."
+  orderbook_depth_2pct:
+    label: "Orderboekdiepte"
+    uitleg: "Waarde aan orders binnen 2% van de koers op gereguleerde beurzen."
+  payout_to_affo:
+    label: "Uitkering/AFFO"
+    uitleg: "Dividend als deel van de kasstroom uit verhuur. Boven 100% is niet houdbaar."
+  pct_above_sma200:
+    label: "Marktbreedte"
+    uitleg: "Deel van de aandelen in de index dat boven het 200-daags gemiddelde staat."
+  peg_deviation:
+    label: "Afwijking van 1,00"
+    uitleg: "Hoe ver en hoe vaak de koers van de stablecoin van 1,00 afweek."
+  piotroski_f:
+    label: "Piotroski F-score"
+    uitleg: "Score van 0 tot 9 op winstgevendheid, schuld en efficiëntie. Hoger is gezonder."
+  price_to_affo:
+    label: "Koers/AFFO"
+    uitleg: "Koers gedeeld door de kasstroom uit verhuur per aandeel."
+  price_to_realized:
+    label: "Koers/gerealiseerde prijs"
+    uitleg: "Koers gedeeld door de gemiddelde prijs waartegen munten het laatst bewogen."
+  protocol_fees:
+    label: "Fees"
+    uitleg: "Totale vergoedingen die gebruikers aan het netwerk betalen."
+  protocol_revenue:
+    label: "Omzet protocol"
+    uitleg: "Deel van de fees dat het protocol zelf houdt."
+  ptbv_vs_rotce:
+    label: "Koers/tastbare boekwaarde t.o.v. rendement"
+    uitleg: "Koers gedeeld door tastbare boekwaarde, afgezet tegen het rendement op tastbaar eigen vermogen. Hoger is goedkoper voor het rendement."
+  puell_multiple:
+    label: "Puell-multiple"
+    uitleg: "Dagelijkse inkomsten van miners gedeeld door het jaargemiddelde."
+  rate_path:
+    label: "Rentepad"
+    uitleg: "Verwachte richting van de rente van de eerste valuta ten opzichte van de tweede."
+  rating_quality:
+    label: "Ratings"
+    uitleg: "Gemiddelde kredietbeoordeling van de obligaties."
+  real_customer_revenue:
+    label: "Omzet echte afnemers"
+    uitleg: "Omzet van betalende gebruikers, zonder door tokens gesubsidieerd gebruik."
+  real_rate:
+    label: "Reële rente"
+    uitleg: "Rente min verwachte inflatie."
+  real_rate_10y:
+    label: "Reële rente 10 jaar"
+    uitleg: "Rente op tienjarige inflatiegeïndexeerde Amerikaanse staatsleningen (FRED DFII10)."
+  real_staking_yield:
+    label: "Reële stakingopbrengst"
+    uitleg: "Stakingbeloning min de inflatie van het tokenaanbod."
+  real_yield:
+    label: "Reële rente"
+    uitleg: "Rendement van de staatsobligatie min verwachte inflatie."
+  redeemability:
+    label: "Inwisselbaarheid"
+    uitleg: "Hoe makkelijk de stablecoin bij de uitgever in te wisselen is voor geld."
+  redemption_score:
+    label: "Inwisseling"
+    uitleg: "Voorwaarden waaronder de token in te wisselen is voor het onderliggende."
+  reer_deviation:
+    label: "Afwijking reële wisselkoers"
+    uitleg: "Hoe ver de reële effectieve wisselkoers (BIS) boven de eigen historie ligt. Hoog betekent duur."
+  regime_score:
+    label: "Marktregime"
+    uitleg: "Stand van het marktregime omgezet naar een score."
+  regulated_volume:
+    label: "Omzet gereguleerde beurzen"
+    uitleg: "Handelsvolume alleen op gereguleerde beurzen; schijnhandel elders telt niet mee."
+  replication_physical:
+    label: "Fysiek of termijn"
+    uitleg: "Of het product de grondstof fysiek aanhoudt of termijncontracten gebruikt."
+  replication_score:
+    label: "Replicatie"
+    uitleg: "Fysiek (koopt de aandelen) of synthetisch (via een ruilcontract)."
+  reserve_quality:
+    label: "Kwaliteit reserves"
+    uitleg: "Waar de reserves achter de stablecoin uit bestaan."
+  revenue_growth:
+    label: "Omzetgroei"
+    uitleg: "Groei van de omzet."
+  roic:
+    label: "ROIC"
+    uitleg: "Rendement op geïnvesteerd kapitaal."
+  roll_yield_12m:
+    label: "Rolopbrengst 12 maanden"
+    uitleg: "Winst of verlies door het doorrollen van termijncontracten over het afgelopen jaar."
+  rotce:
+    label: "ROTCE"
+    uitleg: "Rendement op tastbaar eigen vermogen."
+  same_store_rent_growth:
+    label: "Huurgroei"
+    uitleg: "Huurgroei op vergelijkbare basis, zonder effect van nieuw verworven of afgestoten panden."
+  securities_lending_score:
+    label: "Uitleenbeleid"
+    uitleg: "Of en hoe het fonds aandelen uitleent en wie de opbrengst krijgt."
+  shareholder_yield:
+    label: "Aandeelhoudersrendement"
+    uitleg: "Dividend plus inkoop van aandelen min uitgifte, gedeeld door beurswaarde."
+  short_interest:
+    label: "Short interest"
+    uitleg: "Deel van de aandelen dat is uitgeleend aan partijen die op een daling inzetten."
+  solvency2_ratio:
+    label: "Solvency II-ratio"
+    uitleg: "Kapitaal van een verzekeraar gedeeld door het wettelijk vereiste kapitaal."
+  spread_per_default_risk:
+    label: "Opslag per risico"
+    uitleg: "Renteopslag gedeeld door het verwachte wanbetalingsrisico."
+  stablecoin_supply_growth:
+    label: "Aanbod stablecoins"
+    uitleg: "Groei van het totale aanbod aan stablecoins; een maat voor geld dat klaarstaat."
+  technical_score:
+    label: "Technische score"
+    uitleg: "Score uit trendstand, momentum, afstand tot de top, relatieve sterkte en volatiliteit."
+  terms_of_trade:
+    label: "Ruilvoet"
+    uitleg: "Exportprijzen gedeeld door importprijzen."
+  top10_weight:
+    label: "Top 10 gewicht"
+    uitleg: "Gewicht van de tien grootste posities in het fonds."
+  tracking_difference:
+    label: "Tracking difference"
+    uitleg: "Werkelijk verschil tussen fondsrendement en indexrendement over 3 tot 5 jaar. Dichter bij nul of positief is beter."
+  underlying_grade_score:
+    label: "Grade onderliggende"
+    uitleg: "Score van de onderliggende asset uit het eigen model."
+  unlock_30d:
+    label: "Vrijkomend aanbod 30 dagen"
+    uitleg: "Deel van het aanbod dat binnen 30 dagen vrijkomt."
+  unlock_365d:
+    label: "Vrijkomend aanbod 365 dagen"
+    uitleg: "Deel van het aanbod dat binnen een jaar vrijkomt."
+  unlock_90d:
+    label: "Vrijkomend aanbod 90 dagen"
+    uitleg: "Deel van het aanbod dat binnen 90 dagen vrijkomt."
+  unlock_insiders_90d:
+    label: "Unlocks team en investeerders"
+    uitleg: "Deel van het aanbod dat binnen 90 dagen vrijkomt voor team of vroege investeerders."
+  volatility:
+    label: "Volatiliteit"
+    uitleg: "Hoe sterk de koers schommelt, op jaarbasis."
+  volatility_vs_history:
+    label: "Volatiliteit t.o.v. historie"
+    uitleg: "Huidige volatiliteit vergeleken met de eigen historie."
+  walt:
+    label: "Resterende huurtermijn"
+    uitleg: "Gemiddelde resterende looptijd van de huurcontracten, gewogen naar huur."
+  yield_curve_slope:
+    label: "Rentecurve"
+    uitleg: "Verschil tussen lange en korte rente. Negatief (inverse curve) ging vaak vooraf aan recessies."
+  yield_per_duration:
+    label: "Rendement per jaar duration"
+    uitleg: "Effectief rendement gedeeld door duration; vergoeding per eenheid renterisico."

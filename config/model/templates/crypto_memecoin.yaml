@@ -1,0 +1,40 @@
+id: crypto_memecoin
+name_nl: Memecoin
+tab: crypto
+grading: safety_only
+assign_on: coingecko_category
+peer_group: crypto_subtype
+regime_adjust: false
+base_grade: C
+max_grade: C
+label_nl: speculatie
+note_nl: Geen gewogen grade. Alleen een veiligheidscontrole, met liquiditeit en aandacht ter informatie.
+display_metrics: [dex_liquidity, attention_score]
+pillars: []
+gates:
+  - id: mint_authority
+    kind: flag
+    flag: mint_authority_active
+    applies_to: [solana]
+    cap: F
+    reason_nl: De mint-bevoegdheid is actief; er kunnen onbeperkt tokens bij komen.
+  - id: freeze_authority
+    kind: flag
+    flag: freeze_authority_active
+    applies_to: [solana]
+    cap: F
+    reason_nl: De freeze-bevoegdheid is actief; tegoeden kunnen worden bevroren.
+  - id: liquidity_unlocked
+    kind: flag
+    flag: liquidity_not_locked
+    applies_to: [solana]
+    cap: F
+    reason_nl: De liquiditeit is niet verbrand of vergrendeld.
+  - id: concentrated_holders
+    kind: metric_threshold
+    metric: holders_top10
+    op: ">"
+    value: 0.15
+    applies_to: [solana]
+    cap: D
+    reason_nl: De tien grootste houders bezitten meer dan 15% van het aanbod.
