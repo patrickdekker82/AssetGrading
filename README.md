@@ -65,6 +65,7 @@ Alles wat het model bepaalt staat in versiebeheerde YAML-bestanden, niet in code
 | `config/model/metrics.yaml` | Alle maatstaven, met of hoger of lager beter is |
 | `config/model/technical.yaml` | De technische score en de standaardindicatoren per klasse |
 | `config/universes.yaml` | Tabs en lijstgrootte (top 25, 50 of 100) |
+| `config/stocks.yaml` | Aandelen: hoe de VS-lijst wordt bepaald, de AEX-fondsen (met ISIN) en de koersbronnen |
 | `config/providers.yaml` | Databronnen: adressen, snelheidslimieten, maandbudgetten, planning van de nachtelijke runs |
 | `config/glossary.nl.yaml` | De woordenlijst: elke tooltip in de interface komt hiervandaan |
 | `.env` | Wachtwoorden en API-sleutels (nooit in git) |
@@ -91,6 +92,7 @@ De rekenserver haalt elke nacht zelf data op (tijden in UTC, instelbaar in `conf
 | Taak | Wanneer | Wat |
 | --- | --- | --- |
 | Crypto | 00:05 | Top 50 van CoinGecko, dagkoersen (Coinbase → Binance → CoinGecko), marktwaarde, TVL en fees (DefiLlama), on-chain data (Coin Metrics) |
+| Aandelen | werkdagen 22:30 | Grootste SEC-registranten met een 10-K en de AEX-fondsen, dagkoersen (Tiingo → Yahoo; EODHD als je die afneemt), SEC-cijfers na elke nieuwe publicatie en minstens maandelijks, daarna de grades |
 | Wisselkoersen en macro | werkdagen 16:30 | ECB-referentiekoersen (Frankfurter) en rentes, VIX en dollarindex (FRED) |
 | Opruimen | 03:30 | Ruwe antwoorden ouder dan de bewaartermijn per bron |
 
@@ -98,24 +100,41 @@ De pagina **Verbruik** (rechtsboven) toont per bron het aantal aanroepen, het ma
 de laatste runs en hoeveel data er is. Daar kun je een taak ook direct starten. Via de opdrachtregel:
 `docker compose exec server python -m app.cli run crypto`.
 
-Sleutels in `.env`: `COINGECKO_API_KEY` (gratis Demo-sleutel) en `FRED_API_KEY` (gratis). Zonder
-sleutel slaat de app die bron over en meldt dat; verder werkt alles door.
+Sleutels in `.env`:
+
+| Sleutel | Wat | Zonder sleutel |
+| --- | --- | --- |
+| `COINGECKO_API_KEY` | Gratis Demo-sleutel van CoinGecko | Cryptolijst en marktwaarde ontbreken |
+| `FRED_API_KEY` | Gratis sleutel van FRED | Rentes, VIX en dollarindex ontbreken |
+| `TIINGO_API_KEY` | Gratis sleutel van Tiingo (VS-koersen) | Koersen komen van Yahoo Finance (onofficieel, kan geblokkeerd raken) |
+| `SEC_USER_AGENT` | Verplicht voor SEC: een naam en **jouw** e-mailadres, bijvoorbeeld `"Graadmeter prive naam@voorbeeld.nl"` | SEC weigert de aanvragen |
+| `EODHD_API_KEY` | Betaald (EODHD), optioneel: Europese koersen | Europese koersen komen van Yahoo Finance |
+
+Zonder sleutel slaat de app die bron over en meldt dat; verder werkt alles door.
 
 Elke run is veilig te herhalen: bestaande rijen worden nooit dubbel geschreven, en een herzien cijfer
 komt als nieuwe rij naast het oude (met het moment waarop het bekend werd).
 
 ## Grades
 
-Na de nachtelijke cryptorun berekent de rekenserver voor elke gevolgde munt een grade voor de laatst
-afgesloten dag en slaat die op in `grade_snapshot` (nooit overschreven). Per munt komt er een grade, een
-pegveiligheid (stablecoins), een speculatie-oordeel (memecoins) of een reden waarom er geen grade is.
+Na elke run berekent de rekenserver voor elke gevolgde asset een grade voor de laatst afgesloten dag
+(crypto: gisteren; aandelen: de laatste beursdag) en slaat die op in `grade_snapshot` (nooit overschreven).
+Per asset komt er een grade, een pegveiligheid (stablecoins), een speculatie-oordeel (memecoins) of een
+reden waarom er geen grade is.
 
-- **Opnieuw berekenen:** `docker compose exec server python -m app.cli grade 2026-10-10`
+Aandelen worden vergeleken binnen hun sector (uit de SIC-code bij SEC); een sector met minder dan acht
+aandelen valt terug op alle aandelen met hetzelfde sjabloon. Banken en verzekeraars hebben een eigen
+sjabloon, net als vastgoedfondsen. Europese aandelen zonder SEC-registratie hebben geen gratis bron voor
+jaarcijfers en krijgen daarom geen grade, alleen koersen en een technische score.
+
+- **Opnieuw berekenen:** `docker compose exec server python -m app.cli grade 2026-10-10 [crypto|stocks]`
   (een dag die al een grade heeft, wordt niet overschreven).
 - **Controleren dat elke grade exact te herleiden is:** `docker compose exec server python -m app.cli verify`.
 - **Gegevens invullen die geen gratis bron heeft** (unlock-schema's, audits, hacks, bij RWA-tokens de
-  uitgever en bewaring): `docker compose exec server python -m app.cli set-fact <coingecko-id> <veld> <waarde>`,
+  uitgever en bewaring): `docker compose exec server python -m app.cli set-fact <asset> <veld> <waarde>`,
   bijvoorbeeld `set-fact arbitrum unlock_90d 0.04` of `set-fact somecoin flag_unresolved_exploit 1`.
+  `<asset>` is de sleutel uit de adresbalk (`arbitrum`, `v`, `abn-as`). Voor een aandeel waarvan SEC
+  geen aantal aandelen geeft (Visa, Berkshire Hathaway) kan dat met `set-fact v shares_outstanding <aantal>`.
   Zo'n waarde telt mee vanaf het moment van invullen, nooit met terugwerkende kracht.
 
 ## Back-up
@@ -145,8 +164,8 @@ De app wordt in elf fases gebouwd (zie `CHANGELOG.md`). Na elke fase volgt een a
 | 0 | Fundament | Klaar |
 | 1 | Datalaag (crypto, wisselkoersen, macro) | Klaar |
 | 2 | Grading-engine en crypto | Klaar |
-| 3 | Interface en grafiek | Klaar, wacht op akkoord |
-| 4 | Aandelen | |
+| 3 | Interface en grafiek | Klaar |
+| 4 | Aandelen | Klaar, wacht op akkoord |
 | 5 | ETF's, obligaties, indices en marktregime | |
 | 6 | Grondstoffen en valuta | |
 | 7 | Toelichting, volglijst en bronnen | |

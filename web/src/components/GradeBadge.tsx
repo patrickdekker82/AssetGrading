@@ -28,6 +28,10 @@ export type GradeRow = {
   spark: number[];
   watched: boolean;
   asset_class: string;
+  sector?: string | null;
+  country?: string | null;
+  market_cap_eur?: number | null;
+  lists?: string[];
 };
 
 function tone(letter: string): string {

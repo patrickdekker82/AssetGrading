@@ -77,6 +77,8 @@ def insert_facts(session: Session, asset_id: int, source: str, facts: Iterable[F
         return 0
     fields = {f.field for f in facts}
     latest = _latest_fact_values(session, asset_id, source, fields)
+    if any(f.available_at is not None for f in facts):
+        return _insert_dated_facts(session, asset_id, source, facts, latest, fetched_at)
     known_fields = {field for field, _ in latest}
     rows = []
     seen: set[tuple[str, date]] = set()
@@ -98,6 +100,65 @@ def insert_facts(session: Session, asset_id: int, source: str, facts: Iterable[F
         })
     if rows:
         session.execute(insert(FundamentalFact), rows)
+    return len(rows)
+
+
+def _insert_dated_facts(session: Session, asset_id: int, source: str, facts: list[Fact],
+                        latest: dict[tuple[str, date], Decimal], fetched_at: datetime) -> int:
+    """Facts whose publication moment is known (filings): every version in filing order, each kept only
+    when it differs from the version before it. A version filed before an already stored, different
+    version is not inserted again (the stored history is never rewritten)."""
+    known_at = _latest_fact_times(session, asset_id, source, {f.field for f in facts})
+    rows = []
+    current = dict(latest)
+    for f in sorted(facts, key=lambda x: (x.field, x.as_of, x.available_at or fetched_at)):
+        key = (f.field, f.as_of)
+        available_at = f.available_at or fetched_at
+        if key in current and Decimal(current[key]) == f.value:
+            continue
+        if key in known_at and available_at <= known_at[key]:
+            continue
+        current[key] = f.value
+        known_at[key] = available_at
+        rows.append({
+            "asset_id": asset_id, "field": f.field, "as_of": f.as_of, "value": f.value, "unit": f.unit,
+            "source": source, "available_at": available_at, "fetched_at": fetched_at, "call_id": f.call_id,
+        })
+    for i in range(0, len(rows), 5000):
+        session.execute(insert(FundamentalFact), rows[i:i + 5000])
+    return len(rows)
+
+
+def _latest_fact_times(session: Session, asset_id: int, source: str,
+                       fields: set[str]) -> dict[tuple[str, date], datetime]:
+    stmt = (
+        select(FundamentalFact.field, FundamentalFact.as_of, func.max(FundamentalFact.available_at))
+        .where(FundamentalFact.asset_id == asset_id, FundamentalFact.source == source,
+               FundamentalFact.field.in_(fields))
+        .group_by(FundamentalFact.field, FundamentalFact.as_of)
+    )
+    return {(field, as_of): t for field, as_of, t in session.execute(stmt)}
+
+
+def upsert_bars(session: Session, asset_id: int, source: str, bars: Iterable[Bar], fetched_at: datetime) -> int:
+    """Insert or replace bars: adjusted stock prices change for all earlier days after a dividend or split."""
+    rows = [
+        {
+            "asset_id": asset_id, "interval": "1d", "ts": b.ts, "source": source, "open": b.open, "high": b.high,
+            "low": b.low, "close": b.close, "volume": b.volume, "quote_currency": b.quote,
+            "fetched_at": fetched_at, "call_id": b.call_id,
+        }
+        for b in bars
+        if b.close is not None
+    ]
+    for i in range(0, len(rows), 2000):
+        stmt = insert(PriceBar).values(rows[i:i + 2000])
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["asset_id", "interval", "ts", "source"],
+            set_={c: stmt.excluded[c] for c in ("open", "high", "low", "close", "volume", "quote_currency",
+                                                "fetched_at", "call_id")},
+        )
+        session.execute(stmt)
     return len(rows)
 
 

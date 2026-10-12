@@ -18,13 +18,15 @@ type Gate = { id: string; status: string; cap: string | null; label_nl: string |
   detail: string | null };
 type Detail = {
   asset: { id: string; name: string; ticker: string; asset_class: string; template?: string; template_name?: string;
-    categories: string[]; in_watchlist: boolean; price_sources: string[] };
+    categories: string[]; in_watchlist: boolean; price_sources: string[]; sector: string | null;
+    country: string | null };
   price: { ts: string; source: string; quote_currency: string; close_native: number; close_eur: number } | null;
   history: HistoryPoint[];
   snapshot: null | { as_of: string; model_version: string; status: string; letter: string | null;
     letter_low: string | null; letter_high: string | null; score: number | null; quality: number | null;
     timing: number | null; coverage: number; peg_safety: number | null; labels: string[]; reason: string | null;
-    horizon_months: number[]; notes: string[]; btc_relative: { score: number; letter: string } | null };
+    horizon_months: number[]; notes: string[]; btc_relative: { score: number; letter: string } | null;
+    data_notes: string[] };
   pillars?: Pillar[];
   gates?: Gate[];
   explanation?: string;
@@ -70,6 +72,8 @@ export default async function AssetPage({ params }: Props) {
             <h1>{d.asset.name} <span className="muted">{d.asset.ticker}</span></h1>
             <p className="muted small">
               {d.asset.template_name ? <><Term id="sjabloon">Sjabloon</Term>: {d.asset.template_name}</> : null}
+              {d.asset.sector && <> · <Term id="sector">Sector</Term>: {d.asset.sector}</>}
+              {d.asset.country && <> · {d.asset.country}</>}
               {d.price && <> · {euro.format(d.price.close_eur)}
                 {d.price.quote_currency !== "EUR" && <> ({native.format(d.price.close_native)} {d.price.quote_currency})</>}
                 {" "}slot {d.price.ts}</>}
@@ -96,6 +100,9 @@ export default async function AssetPage({ params }: Props) {
           <p className="notice">Voor deze asset is nog geen grade berekend. Dat gebeurt in de eerstvolgende nachtrun.</p>
         )}
         {s?.reason && <p className="notice">{s.reason}</p>}
+        {s && s.data_notes.length > 0 && (
+          <p className="muted small">Bij de data: {s.data_notes.join(" · ")}</p>
+        )}
       </header>
 
       {s && d.pillars && d.pillars.length > 0 && (

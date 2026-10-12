@@ -1,8 +1,8 @@
 # Graadmeter - global model settings.
 # Every change anywhere under config/model/ requires a new `version`
 # and a refreshed entry in versions.lock.yaml (see README, "Modelversie").
-version: "0.2.0"
-description: Startgewichten uit de bouwprompt (hoofdstuk 5 en 6), nog niet geijkt; grading-engine en cryptotoewijzing.
+version: "0.3.0"
+description: Startgewichten uit de bouwprompt (hoofdstuk 5 en 6), nog niet geijkt; grading-engine en cryptotoewijzing; aandelen.
 
 default_horizon_months: [6, 12]
 
@@ -38,6 +38,8 @@ peers:
   groups:
     crypto_alt: [crypto_platform, crypto_defi, crypto_utility]
   own_history_years: 3           # window for the 20% own-history part of valuation metrics
+  # Stocks compare within their sector; a sector with fewer members than min_group_size falls back to all
+  # stocks graded with the same template.
 
 stability:
   hysteresis_points: 2           # letter changes when the bound is crossed by >= 2 points

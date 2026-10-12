@@ -42,11 +42,15 @@ export type Filters = {
   min: Partial<Record<"score" | "quality" | "timing" | "coverage" | "price", number>>;
   grade: string;          // "" = all, "graded" = only with a grade, otherwise "at least this letter"
   template: string;
+  sector: string;
+  country: string;
   changed: boolean;
   falling: boolean;
 };
 
-export const EMPTY_FILTERS: Filters = { text: {}, min: {}, grade: "", template: "", changed: false, falling: false };
+export const EMPTY_FILTERS: Filters = {
+  text: {}, min: {}, grade: "", template: "", sector: "", country: "", changed: false, falling: false,
+};
 
 export function applyFilters(rows: GradeRow[], f: Filters): GradeRow[] {
   return rows.filter((r) => {
@@ -66,6 +70,8 @@ export function applyFilters(rows: GradeRow[], f: Filters): GradeRow[] {
       if (!r.letter || r.status === "no_grade" || GRADE_ORDER.indexOf(r.letter) > GRADE_ORDER.indexOf(f.grade)) return false;
     }
     if (f.template && r.template !== f.template) return false;
+    if (f.sector && r.sector !== f.sector) return false;
+    if (f.country && r.country !== f.country) return false;
     if (f.changed && (!r.letter_month_ago || r.letter_month_ago === r.letter)) return false;
     if (f.falling && !(r.spark.length > 1 && r.spark[r.spark.length - 1] < r.spark[0])) return false;
     return true;

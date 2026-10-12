@@ -294,6 +294,7 @@ class TechnicalParams(Strict):
     volatility_history: int
     min_block_coverage: float = Field(gt=0, le=1)
     benchmark: str
+    days_per_year: int = 365
 
 
 class TechnicalConfig(Strict):
@@ -327,5 +328,31 @@ class CryptoAssignment(Strict):
     tags: dict[str, TagRule]
 
 
+class SicRule(Strict):
+    template: str
+    sic: list[tuple[int, int]]
+    tag: str | None = None
+
+
+class SectorRule(Strict):
+    sector: str
+    sic: list[tuple[int, int]]
+
+
+class StockOverride(Strict):
+    template: str | None = None
+    tag: str | None = None
+    sector: str | None = None
+
+
+class StockAssignment(Strict):
+    rules: list[SicRule]
+    default: str
+    sectors: list[SectorRule]
+    default_sector: str
+    overrides: dict[str, StockOverride]
+
+
 class AssignmentConfig(Strict):
     crypto: CryptoAssignment
+    stocks: StockAssignment | None = None   # absent in model versions before 0.3.0

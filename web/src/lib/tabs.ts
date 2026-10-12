@@ -13,6 +13,12 @@ export const TABS = [
 
 export type TabSlug = (typeof TABS)[number]["slug"];
 
+/** The tab an asset class lives on (asset pages are /<tab>/<asset>). */
+export function tabForClass(assetClass: string): string {
+  return ({ crypto: "crypto", stock: "stocks", etf: "etfs", index: "indices", commodity: "commodities",
+    fx: "fx", bond: "bonds" } as Record<string, string>)[assetClass] ?? assetClass;
+}
+
 export function isTabSlug(value: string): value is TabSlug {
   return TABS.some((t) => t.slug === value);
 }

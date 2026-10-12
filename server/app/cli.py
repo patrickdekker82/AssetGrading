@@ -2,12 +2,14 @@
 
     python -m app.cli check-config        validate configuration
     python -m app.cli lock-model          register a new model version
-    python -m app.cli run <job>           run a job now (crypto, fx_macro, prune_raw)
-    python -m app.cli grade [YYYY-MM-DD]  grade crypto for a day (default: yesterday)
+    python -m app.cli run <job>           run a job now (crypto, stocks, fx_macro, prune_raw)
+    python -m app.cli grade [YYYY-MM-DD] [crypto|stocks]
+                                          grade a day (default: yesterday, both classes)
     python -m app.cli verify [N]          recompute the latest N snapshots (default: all) and compare
-    python -m app.cli set-fact <coingecko_id> <field> <value>
-                                          enter a fact no free source provides, e.g. unlock_90d 0.04 or
-                                          flag_unresolved_exploit 1 (stored with source 'manual')
+    python -m app.cli set-fact <asset> <field> <value>
+                                          enter a fact no free source provides, e.g. unlock_90d 0.04,
+                                          flag_unresolved_exploit 1 or, for a stock whose share count SEC
+                                          does not give, shares_outstanding 1950000000 (source 'manual')
 """
 
 import sys
@@ -34,7 +36,7 @@ def main(argv: list[str]) -> int:
         elif command == "run":
             return _run_job(argv[1] if len(argv) > 1 else "")
         elif command == "grade":
-            return _grade(argv[1] if len(argv) > 1 else None)
+            return _grade(argv[1] if len(argv) > 1 else None, argv[2] if len(argv) > 2 else None)
         elif command == "verify":
             return _verify(int(argv[1]) if len(argv) > 1 else None)
         elif command == "set-fact":
@@ -77,7 +79,10 @@ def _run_job(name: str) -> int:
 
     with sf() as session:
         version_id = register_model_version(session, model).id
-    ctx = JobContext(engine, sf, Providers(cfg, DbRecorder(sf)), cfg, universes, model, version_id)
+    from app.stocks_config import load_stocks_config
+
+    stocks = load_stocks_config(settings.config_dir / "stocks.yaml")
+    ctx = JobContext(engine, sf, Providers(cfg, DbRecorder(sf)), cfg, universes, model, version_id, stocks=stocks)
     run = run_job(ctx, name, trigger="cli")
     print(json.dumps({"status": run.status, "summary": run.summary, "error": run.error}, indent=2, default=str))
     return 0 if run.status in ("ok", "partial", "skipped") else 1
@@ -98,18 +103,25 @@ def _context():
     return settings, sf, config, version_id
 
 
-def _grade(day: str | None) -> int:
+def _grade(day: str | None, asset_class: str | None) -> int:
     import json
     from datetime import UTC, date, datetime, timedelta
 
     from app.grading.crypto import grade_crypto
+    from app.grading.stocks import grade_stocks
     from app.providers.config import load_providers_config
+    from app.stocks_config import load_stocks_config
 
     settings, sf, config, version_id = _context()
     cfg = load_providers_config(settings.config_dir / "providers.yaml")
     as_of = date.fromisoformat(day) if day else datetime.now(UTC).date() - timedelta(days=1)
-    report = grade_crypto(sf, config, version_id, as_of, date.fromisoformat(cfg.crypto.history_start))
-    print(json.dumps(report.as_dict(), indent=2))
+    if asset_class in (None, "crypto"):
+        report = grade_crypto(sf, config, version_id, as_of, date.fromisoformat(cfg.crypto.history_start))
+        print(json.dumps({"crypto": report.as_dict()}, indent=2))
+    if asset_class in (None, "stocks"):
+        stocks = load_stocks_config(settings.config_dir / "stocks.yaml")
+        report = grade_stocks(sf, config, version_id, stocks, as_of)
+        print(json.dumps({"stocks": report.as_dict()}, indent=2))
     return 0
 
 
@@ -127,6 +139,7 @@ def _verify(limit: int | None) -> int:
 
 
 def _set_fact(coingecko_id: str, field: str, value: str) -> int:
+    """`coingecko_id` is the asset key as in the URL (CoinGecko id for crypto, e.g. 'v' or 'abn-as' for stocks)."""
     from datetime import UTC, datetime, timedelta
     from decimal import Decimal
 
@@ -139,7 +152,7 @@ def _set_fact(coingecko_id: str, field: str, value: str) -> int:
     _, sf, _, _ = _context()
     now = datetime.now(UTC)
     with sf() as session:
-        asset = session.scalar(select(Asset).where(Asset.coingecko_id == coingecko_id))
+        asset = session.scalar(select(Asset).where(Asset.slug == coingecko_id))
         if asset is None:
             print(f"onbekende asset: {coingecko_id}", file=sys.stderr)
             return 1

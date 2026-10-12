@@ -91,6 +91,9 @@ class Asset(Base):
     symbol: Mapped[str] = mapped_column(String(40))
     name: Mapped[str] = mapped_column(String(200))
     coingecko_id: Mapped[str | None] = mapped_column(String(200), unique=True)
+    slug: Mapped[str | None] = mapped_column(String(200), unique=True)   # key in URLs and the API
+    country: Mapped[str | None] = mapped_column(String(2))
+    sector: Mapped[str | None] = mapped_column(String(60))
     categories: Mapped[list | None] = mapped_column(JSONB)
     template_override: Mapped[str | None] = mapped_column(String(40))
     price_sources: Mapped[list | None] = mapped_column(JSONB)  # preference order, e.g. ["binance", ...]

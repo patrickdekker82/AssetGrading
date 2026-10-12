@@ -30,13 +30,14 @@ MIN_PEERS = 3
 @dataclass
 class Prepared:
     asset_id: int
-    coingecko_id: str
+    key: str                      # coingecko id or stock slug
     template_id: str
     tags: list[str]
     metrics: Metrics
     technical: dict | None = None
     btc_relative: dict | None = None
     price_eur: float | None = None
+    peer_key: str | None = None   # stocks: the sector, compared within the template
 
 
 def percentile_metric_ids(config: ModelConfig, template_id: str) -> list[str]:
@@ -57,6 +58,19 @@ def peer_group(config: ModelConfig, template_id: str, counts: dict[str, int]) ->
         group = peers.broaden[template_id]
         return group, peers.groups[group]
     return template_id, [template_id]
+
+
+def peer_members(p: "Prepared", prepared: list["Prepared"], config: ModelConfig,
+                 counts: dict[str, int]) -> tuple[str, list["Prepared"]]:
+    """Members of the comparison group of `p`. Stocks compare within their sector (same template); a sector
+    with fewer than `min_group_size` members falls back to all stocks with that template."""
+    if config.templates[p.template_id].peer_group == "sector" and p.peer_key:
+        sector = [q for q in prepared if q.template_id == p.template_id and q.peer_key == p.peer_key]
+        if len(sector) >= config.settings.peers.min_group_size:
+            return f"{p.template_id}:{p.peer_key}", sector
+        return p.template_id, [q for q in prepared if q.template_id == p.template_id]
+    group_name, group_templates = peer_group(config, p.template_id, counts)
+    return group_name, [q for q in prepared if q.template_id in group_templates]
 
 
 def _own_history_pct(value: float, history: pd.Series, as_of: date, years: float, higher: bool,
@@ -89,7 +103,7 @@ def prepare(data: CryptoData, config: ModelConfig) -> list[Prepared]:
 
 def _technical(prepared: list[Prepared], data: CryptoData, config: ModelConfig) -> None:
     params = config.technical.params["crypto"]
-    btc = next((p for p in prepared if p.coingecko_id == params.benchmark), None)
+    btc = next((p for p in prepared if p.key == params.benchmark), None)
     bench = data.closes.get(btc.asset_id) if btc else None
     raws: dict[int, TechRaw] = {}
     rel_raws: dict[int, TechRaw] = {}
@@ -132,8 +146,7 @@ def build_inputs(prepared: list[Prepared], config: ModelConfig, as_of: date) -> 
         if template.grading == "weighted":
             own_history = template.peer_group == "own_history"
             half_life = (template.own_history or {}).get("recency_half_life_years") if own_history else None
-            group_name, group_templates = peer_group(config, p.template_id, counts)
-            members = [q for q in prepared if q.template_id in group_templates]
+            group_name, members = peer_members(p, prepared, config, counts)
             valuation = valuation_metric_ids(config, p.template_id)
             for metric_id in percentile_metric_ids(config, p.template_id):
                 mi = metrics.get(metric_id)
@@ -180,6 +193,13 @@ def grade_crypto(sf: sessionmaker[Session], config: ModelConfig, model_version_i
     with sf() as session:
         data = load_crypto_data(session, as_of, knowledge, history_start)
     prepared = prepare(data, config)
+    write_snapshots(sf, prepared, config, model_version_id, as_of, knowledge, report)
+    return report
+
+
+def write_snapshots(sf: sessionmaker[Session], prepared: list[Prepared], config: ModelConfig, model_version_id: int,
+                    as_of: date, knowledge: datetime, report: Report) -> None:
+    """Grade every prepared asset and store the snapshots (an existing snapshot for the day is kept)."""
     inputs = build_inputs(prepared, config, as_of)
     days = config.settings.stability.hysteresis_days
     rows = []
@@ -196,7 +216,6 @@ def grade_crypto(sf: sessionmaker[Session], config: ModelConfig, model_version_i
             added = session.execute(stmt.returning(GradeSnapshot.id)).all()
             report.add("snapshots_added", len(added))
         session.commit()
-    return report
 
 
 def snapshot_row(p: Prepared, inp: GradeInput, peers: dict, result: GradeResult, model_version_id: int,
@@ -210,7 +229,7 @@ def snapshot_row(p: Prepared, inp: GradeInput, peers: dict, result: GradeResult,
         "price_eur": p.price_eur, "knowledge_time": knowledge,
         "inputs": {
             "grade_input": inp.to_dict(), "peers": peers, "provenance": p.metrics.provenance,
-            "raw": p.metrics.raw, "technical": p.technical,
+            "raw": p.metrics.raw, "technical": p.technical, "notes": p.metrics.notes,
         },
         "result": res,
     }

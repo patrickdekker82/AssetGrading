@@ -67,13 +67,22 @@ async function Ranking({ tab, phase }: { tab: string; phase: number }) {
   const list = tab === "watchlist" ? grades.rows : grades.rows.filter((r) => r.in_list);
   const stable = grades.rows.filter((r) => r.exclusion === "stablecoin");
   const withGrade = list.filter((r) => r.status !== "no_grade").length;
+  const us = grades.rows.filter((r) => r.lists?.includes("VS"));
+  const aex = grades.rows.filter((r) => r.lists?.includes("AEX"));
   const views = tab === "watchlist"
     ? [{ id: "all", label: "Volglijst", rows: list }]
-    : [
-      { id: "list", label: `Top ${list.length}`, rows: list },
-      ...(stable.length ? [{ id: "stable", label: "Stablecoins", rows: stable }] : []),
-      { id: "all", label: "Alle gevolgde", rows: grades.rows },
-    ];
+    : tab === "stocks"
+      ? [
+        { id: "list", label: "VS en AEX", rows: list },
+        { id: "us", label: `VS top ${us.length}`, rows: us },
+        { id: "aex", label: "AEX", rows: aex },
+        { id: "all", label: "Alle gevolgde", rows: grades.rows },
+      ]
+      : [
+        { id: "list", label: `Top ${list.length}`, rows: list },
+        ...(stable.length ? [{ id: "stable", label: "Stablecoins", rows: stable }] : []),
+        { id: "all", label: "Alle gevolgde", rows: grades.rows },
+      ];
   return (
     <>
       <p className="meta">

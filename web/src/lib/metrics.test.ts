@@ -12,6 +12,8 @@ describe("metric formatting", () => {
 
   it("names comparison groups and directions in Dutch", () => {
     expect(groupName("own_history")).toBe("eigen historie");
+    expect(groupName("stock_general:Technologie")).toBe("sector Technologie");
+    expect(groupName("stock_financial")).toBe("alle banken en verzekeraars");
     expect(directionText("lower")).toBe("lager is beter");
   });
 });

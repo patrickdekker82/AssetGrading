@@ -36,4 +36,15 @@ describe("ranking filters", () => {
     expect(applyFilters(rows, { ...EMPTY_FILTERS, min: { coverage: 50 } }).map((r) => r.id)).toEqual(["a", "b"]);
     expect(applyFilters(rows, { ...EMPTY_FILTERS, template: "Platform" }).map((r) => r.id)).toEqual(["a", "c"]);
   });
+
+  it("filters stocks on sector and country", () => {
+    const stocks = [
+      row({ id: "aapl", sector: "Technologie", country: "US", asset_class: "stock" }),
+      row({ id: "asml-as", sector: "Technologie", country: "NL", asset_class: "stock" }),
+      row({ id: "jpm", sector: "Financieel", country: "US", asset_class: "stock" }),
+    ];
+    expect(applyFilters(stocks, { ...EMPTY_FILTERS, sector: "Technologie" }).map((r) => r.id)).toEqual(["aapl", "asml-as"]);
+    expect(applyFilters(stocks, { ...EMPTY_FILTERS, sector: "Technologie", country: "US" }).map((r) => r.id))
+      .toEqual(["aapl"]);
+  });
 });

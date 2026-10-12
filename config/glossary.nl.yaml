@@ -114,6 +114,18 @@ terms:
   rangnummer:
     label: Rang
     uitleg: Positie in de ranglijst van deze tab, op volgorde van score.
+  sector:
+    label: Sector
+    uitleg: De bedrijfstak van een aandeel, afgeleid uit de SIC-code in de SEC-registratie (of handmatig bij AEX-fondsen zonder SEC-registratie). Aandelen worden binnen hun sector vergeleken; een sector met minder dan acht aandelen valt terug op alle aandelen met hetzelfde sjabloon.
+  ttm:
+    label: Laatste twaalf maanden
+    uitleg: Omzet, winst en kasstroom over de laatste vier kwartalen, berekend uit het laatste jaarverslag en de kwartaalcijfers sindsdien.
+  beurswaarde:
+    label: Beurswaarde
+    uitleg: Het aantal aandelen (verwaterd, uit de laatste SEC-cijfers) maal de slotkoers zoals die op de beurs gold.
+  gecorrigeerde_koers:
+    label: Gecorrigeerde koers
+    uitleg: Koersen in de grafiek en voor momentum zijn gecorrigeerd voor dividend en splitsingen, zodat een uitkering niet als koersdaling telt.
 
 metrics:
   accruals:
@@ -145,7 +157,7 @@ metrics:
     uitleg: "Formule die geflatteerde cijfers opspoort. Boven -1,78 is dat risico verhoogd."
   beta:
     label: "Bèta"
-    uitleg: "Hoe sterk de koers meebeweegt met de markt. 1 is even sterk; lager is rustiger."
+    uitleg: "Hoe sterk de koers meebeweegt met de index van de eigen markt (S&P 500 of AEX), gemeten op weekrendementen over drie jaar. 1 is even sterk; lager is rustiger."
   bid_ask_spread:
     label: "Spread"
     uitleg: "Verschil tussen bied- en laatprijs. Kosten die je betaalt bij elke transactie."
@@ -280,7 +292,7 @@ metrics:
     uitleg: "Brutowinst gedeeld door totale bezittingen. Een robuuste maat voor winstgevendheid."
   growth_consistency:
     label: "Bestendigheid groei"
-    uitleg: "Hoe regelmatig omzet en winst groeiden over meerdere jaren."
+    uitleg: "Deel van de laatste vijf boekjaren waarin de omzet groeide, gemiddeld met het deel waarin de winst per aandeel groeide. 1 is elk jaar groei."
   holder_payout:
     label: "Uitkering aan houders"
     uitleg: "Deel van de omzet dat via terugkoop of verbranding naar tokenhouders gaat."
@@ -331,7 +343,7 @@ metrics:
     uitleg: "Jaarlijkse kosten van het product."
   margin_stability:
     label: "Stabiliteit marges"
-    uitleg: "Hoe weinig de winstmarge schommelt over de jaren."
+    uitleg: "Hoe weinig de bedrijfsmarge schommelde over de laatste vijf boekjaren: 1 / (1 + standaardafwijking in procentpunten). 1 is volkomen stabiel."
   mcap_to_active_addresses:
     label: "Waarde per actief adres"
     uitleg: "Marktkapitalisatie gedeeld door het aantal actieve adressen."
@@ -361,7 +373,7 @@ metrics:
     uitleg: "Jaarlijkse groei van het tokenaanbod na verbranding."
   net_interest_margin:
     label: "Rentemarge"
-    uitleg: "Verschil tussen ontvangen en betaalde rente als deel van de bezittingen."
+    uitleg: "Netto rente-inkomsten als deel van de totale bezittingen."
   npl_coverage:
     label: "Dekking probleemleningen"
     uitleg: "Voorzieningen gedeeld door probleemleningen."
@@ -409,7 +421,7 @@ metrics:
     uitleg: "Deel van de fees dat het protocol zelf houdt."
   ptbv_vs_rotce:
     label: "Koers/tastbare boekwaarde t.o.v. rendement"
-    uitleg: "Koers gedeeld door tastbare boekwaarde, afgezet tegen het rendement op tastbaar eigen vermogen. Hoger is goedkoper voor het rendement."
+    uitleg: "Hoeveel goedkoper of duurder de koers/tastbare boekwaarde is dan het rendement op tastbaar eigen vermogen rechtvaardigt, volgens een lijn door de vergelijkingsgroep. 0,2 is 20% goedkoper."
   puell_multiple:
     label: "Puell-multiple"
     uitleg: "Dagelijkse inkomsten van miners gedeeld door het jaargemiddelde."
@@ -463,7 +475,7 @@ metrics:
     uitleg: "Groei van de omzet."
   roic:
     label: "ROIC"
-    uitleg: "Rendement op geïnvesteerd kapitaal."
+    uitleg: "Rendement op geïnvesteerd kapitaal: bedrijfsresultaat na belasting gedeeld door eigen vermogen plus schuld min kas."
   roll_yield_12m:
     label: "Rolopbrengst 12 maanden"
     uitleg: "Winst of verlies door het doorrollen van termijncontracten over het afgelopen jaar."
@@ -520,7 +532,7 @@ metrics:
     uitleg: "Deel van het aanbod dat binnen 90 dagen vrijkomt voor team of vroege investeerders."
   volatility:
     label: "Volatiliteit"
-    uitleg: "Hoe sterk de koers schommelt, op jaarbasis."
+    uitleg: "Hoe sterk de koers schommelt, op jaarbasis, gemeten over het laatste jaar."
   volatility_vs_history:
     label: "Volatiliteit t.o.v. historie"
     uitleg: "Huidige volatiliteit vergeleken met de eigen historie."

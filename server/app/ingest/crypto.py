@@ -93,8 +93,8 @@ def ingest_single(sf: sessionmaker[Session], providers: Providers, cfg: Provider
     with sf() as session:
         asset = session.scalar(select(Asset).where(Asset.coingecko_id == coingecko_id))
         if asset is None:
-            asset = Asset(asset_class="crypto", coingecko_id=coingecko_id, symbol=row["symbol"].upper(),
-                          name=row["name"])
+            asset = Asset(asset_class="crypto", coingecko_id=coingecko_id, slug=coingecko_id,
+                          symbol=row["symbol"].upper(), name=row["name"])
             session.add(asset)
             session.flush()
         if not asset.tracked:
@@ -146,8 +146,8 @@ def record_universe(ctx: CryptoContext, rows: list[dict], exclusions: dict[str, 
         for row in rows:
             asset = assets.get(row["id"])
             if asset is None:
-                asset = Asset(asset_class="crypto", coingecko_id=row["id"], symbol=row["symbol"].upper(),
-                              name=row["name"], price_sources=None)
+                asset = Asset(asset_class="crypto", coingecko_id=row["id"], slug=row["id"],
+                              symbol=row["symbol"].upper(), name=row["name"], price_sources=None)
                 session.add(asset)
                 session.flush()
                 assets[row["id"]] = asset

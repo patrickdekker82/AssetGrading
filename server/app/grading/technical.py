@@ -89,12 +89,12 @@ def tech_raw(closes: pd.Series, benchmark: pd.Series | None, p: TechnicalParams,
     start_long = _at(closes, as_of - timedelta(days=p.momentum_long))
     if start_long is not None and closes.index[0] <= as_of - timedelta(days=p.momentum_long):
         end_skip = _at(closes, as_of - timedelta(days=p.momentum_skip))
-        vol = _ann_vol(_window(closes, as_of, p.momentum_long))
+        vol = _ann_vol(_window(closes, as_of, p.momentum_long), p.days_per_year)
         if end_skip is not None and vol:
             raw.momentum_long = (end_skip / start_long - 1) / vol
     if closes.index[0] <= as_of - timedelta(days=p.momentum_short):
         start_short = _at(closes, as_of - timedelta(days=p.momentum_short))
-        vol = _ann_vol(_window(closes, as_of, p.momentum_short))
+        vol = _ann_vol(_window(closes, as_of, p.momentum_short), p.days_per_year)
         if start_short and vol:
             raw.momentum_short = (last / start_short - 1) / vol
 
@@ -117,8 +117,10 @@ def tech_raw(closes: pd.Series, benchmark: pd.Series | None, p: TechnicalParams,
     if closes.index[0] <= as_of - timedelta(days=p.volatility_window + 365):
         hist = _window(closes, as_of, p.volatility_history + p.volatility_window)
         rets = np.log(hist).diff()
-        rolling = (rets.rolling(p.volatility_window).std(ddof=1) * math.sqrt(365)).dropna()
-        if len(rolling) >= 365:
+        # Window and minimum history in trading rows: 91 calendar days of a stock are about 63 rows.
+        rows = max(20, round(p.volatility_window * p.days_per_year / 365))
+        rolling = (rets.rolling(rows).std(ddof=1) * math.sqrt(p.days_per_year)).dropna()
+        if len(rolling) >= p.days_per_year:
             current = float(rolling.iloc[-1])
             pct = percentile_of(current, rolling.tolist(), higher_is_better=True)
             raw.volatility_score = 100 - pct

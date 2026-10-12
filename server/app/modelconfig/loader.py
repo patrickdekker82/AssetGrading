@@ -104,6 +104,12 @@ def _check_assignment(assignment: AssignmentConfig, templates: dict[str, Templat
     for template_id in named:
         if template_id not in templates or templates[template_id].tab != "crypto":
             raise ModelConfigError(f"assignment names unknown crypto template {template_id}")
+    stocks = assignment.stocks
+    stock_named = [] if stocks is None else [r.template for r in stocks.rules] + [stocks.default]
+    stock_named += [o.template for o in stocks.overrides.values() if o.template] if stocks else []
+    for template_id in stock_named:
+        if template_id not in templates or templates[template_id].tab != "stocks":
+            raise ModelConfigError(f"assignment names unknown stock template {template_id}")
 
 
 def _check_metric_references(templates: dict[str, Template], metrics: dict[str, MetricDef]) -> None:

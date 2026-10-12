@@ -2,12 +2,14 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { FetchButton } from "@/components/FetchButton";
 import { fetchServer } from "@/lib/server";
+import { tabForClass } from "@/lib/tabs";
 
 export const metadata: Metadata = { title: "Zoeken · Graadmeter" };
 
 type Local = { id: string; name: string; ticker: string; asset_class: string; tracked: boolean; letter: string | null;
   status: string | null };
-type Remote = { id: string; name: string; symbol: string; market_cap_rank: number | null; platform?: string };
+type Remote = { id: string; name: string; symbol: string; market_cap_rank: number | null; platform?: string;
+  source: "coingecko" | "sec" };
 type Result = { local: Local[]; remote: Remote[]; message: string | null };
 
 export default async function SearchPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
@@ -31,11 +33,11 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
                 {result.local.map((r) => (
                   <li key={r.id}>
                     {r.tracked ? (
-                      <Link href={`/${r.asset_class}/${r.id}`}>{r.name}</Link>
+                      <Link href={`/${tabForClass(r.asset_class)}/${r.id}`}>{r.name}</Link>
                     ) : <span>{r.name}</span>}
                     <span className="muted"> {r.ticker}</span>
                     {r.letter && <span className="grade-inline"> · {r.letter}</span>}
-                    {!r.tracked && <FetchButton coingeckoId={r.id} name={r.name} />}
+                    {!r.tracked && r.asset_class === "crypto" && <FetchButton coingeckoId={r.id} name={r.name} />}
                   </li>
                 ))}
               </ul>
@@ -43,14 +45,17 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
           )}
           {result.remote.length > 0 && (
             <div className="card">
-              <h2 className="card-title">Gevonden bij CoinGecko, nog niet beoordeeld</h2>
+              <h2 className="card-title">Gevonden bij een bron, nog niet beoordeeld</h2>
               <ul className="result-list">
                 {result.remote.map((r) => (
                   <li key={r.id}>
                     <span>{r.name}</span> <span className="muted">{r.symbol?.toUpperCase()}</span>
                     {r.market_cap_rank && <span className="muted"> · rang {r.market_cap_rank}</span>}
                     {r.platform && <span className="muted"> · {r.platform}</span>}
-                    <FetchButton coingeckoId={r.id} name={r.name} />
+                    <span className="muted"> · {r.source === "sec" ? "aandeel VS (SEC)" : "crypto (CoinGecko)"}</span>
+                    {r.source === "sec"
+                      ? <FetchButton ticker={r.id} name={r.name} />
+                      : <FetchButton coingeckoId={r.id} name={r.name} />}
                   </li>
                 ))}
               </ul>

@@ -22,3 +22,58 @@ crypto:
   tags:
     l2: {any_category: [Layer 2 (L2)]}
     solana: {alias_kind: "contract:solana"}
+
+# Stocks: SIC code from SEC filings (chapter 6: "Sectorcode"). Ranges are inclusive.
+# AEX members without SEC filings, and a few companies whose SIC code says little, use the overrides below.
+stocks:
+  rules:
+    - {template: stock_financial, sic: [[6020, 6036], [6111, 6111], [6199, 6199], [6211, 6211]], tag: bank}
+    # Risk carriers only: life, property & casualty, surety, title. Health plans (6324) and insurance brokers
+    # (6411) are graded as general companies; their earnings are not driven by an investment portfolio.
+    - {template: stock_financial, sic: [[6311, 6311], [6331, 6331], [6351, 6351], [6361, 6361], [6399, 6399]], tag: insurer}
+    - {template: stock_reit, sic: [[6798, 6798]]}
+  default: stock_general
+  sectors:                       # comparison groups ("de sector bij aandelen")
+    - {sector: Energie, sic: [[1300, 1399], [2900, 2999]]}
+    - {sector: Materialen, sic: [[1000, 1299], [1400, 1499], [2600, 2699], [2800, 2829], [2850, 2899], [3200, 3399]]}
+    - {sector: Gezondheidszorg, sic: [[2830, 2836], [3840, 3851], [8000, 8099]]}
+    - {sector: Technologie, sic: [[3570, 3579], [3600, 3699], [3810, 3829], [7370, 7379]]}
+    - {sector: Communicatie, sic: [[4800, 4899], [2700, 2799], [7800, 7899]]}
+    - {sector: Nutsbedrijven, sic: [[4900, 4999]]}
+    - {sector: Vastgoed, sic: [[6798, 6798]]}     # before Financieel: the first matching range wins
+    - {sector: Financieel, sic: [[6000, 6799]]}
+    - {sector: Consument, sic: [[2000, 2399], [2840, 2849], [5000, 5999], [7000, 7099], [7200, 7299], [7900, 7999]]}
+    - {sector: Industrie, sic: [[1500, 1799], [2400, 2599], [3400, 3569], [3580, 3599], [3700, 3799], [4000, 4799]]}
+  default_sector: Overig
+  overrides:                     # by asset key: US ticker in lower case; AEX: Euronext ticker + "-as"
+    v: {sector: Financieel}      # payment networks (SIC 7389, business services)
+    ma: {sector: Financieel}
+    blk: {template: stock_general}   # asset manager (SIC 6211 like brokers), no deposits or loan book
+    lrcx: {sector: Technologie}  # chip equipment (SIC 3559, special machinery)
+    tmo: {sector: Gezondheidszorg}   # lab instruments (SIC 3826)
+    ge: {sector: Industrie}      # aircraft engines (SIC 3600)
+    abn-as: {template: stock_financial, tag: bank, sector: Financieel}
+    inga-as: {template: stock_financial, tag: bank, sector: Financieel}
+    agn-as: {template: stock_financial, tag: insurer, sector: Financieel}
+    asrnl-as: {template: stock_financial, tag: insurer, sector: Financieel}
+    nn-as: {template: stock_financial, tag: insurer, sector: Financieel}
+    exo-as: {sector: Financieel}
+    adyen-as: {sector: Technologie}
+    prx-as: {sector: Communicatie}
+    asm-as: {sector: Technologie}
+    besi-as: {sector: Technologie}
+    asml-as: {sector: Technologie}
+    ad-as: {sector: Consument}
+    heia-as: {sector: Consument}
+    una-as: {sector: Consument}
+    akza-as: {sector: Materialen}
+    dsfir-as: {sector: Materialen}
+    imcd-as: {sector: Materialen}
+    mt-as: {sector: Materialen}
+    kpn-as: {sector: Communicatie}
+    umg-as: {sector: Communicatie}
+    phia-as: {sector: Gezondheidszorg}
+    rand-as: {sector: Industrie}
+    ren-as: {sector: Industrie}
+    wkl-as: {sector: Industrie}
+    shell-as: {sector: Energie}

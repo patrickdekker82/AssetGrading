@@ -20,6 +20,7 @@ from app.providers.registry import Providers
 from app.registry import register_model_version
 from app.scheduler import create_scheduler
 from app.settings import get_settings
+from app.stocks_config import load_stocks_config
 from app.universes import load_universes
 
 log = logging.getLogger("graadmeter")
@@ -47,7 +48,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     log.info("model version %s (%s) active", config.version, config.config_hash[:12])
 
     providers = Providers(providers_config, DbRecorder(sf))
-    app.state.jobs = JobContext(engine, sf, providers, providers_config, app.state.universes, config, model_version_id)
+    stocks = load_stocks_config(settings.config_dir / "stocks.yaml")
+    app.state.jobs = JobContext(engine, sf, providers, providers_config, app.state.universes, config, model_version_id,
+                                stocks=stocks)
 
     app.state.scheduler = None
     if settings.scheduler_enabled:

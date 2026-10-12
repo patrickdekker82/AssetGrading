@@ -13,7 +13,8 @@ from app.ingest.crypto import run_crypto
 from app.providers.recorder import DbRecorder
 from app.providers.registry import Providers
 from app.settings import get_settings
-from tests.test_ingest import TODAY, YESTERDAY, fake_world
+from tests.test_ingest import TODAY, YESTERDAY
+from tests.test_stocks import fake_markets
 
 
 @pytest.fixture
@@ -30,7 +31,7 @@ def client(db, world, model, test_database_url, monkeypatch):  # noqa: F811 (fix
         jobs = app.state.jobs
         jobs.cfg = cfg
         jobs.providers = Providers(cfg, DbRecorder(jobs.sf), sleep=lambda s: None,
-                                   client=httpx.Client(transport=httpx.MockTransport(fake_world)),
+                                   client=httpx.Client(transport=httpx.MockTransport(fake_markets)),
                                    env={"COINGECKO_API_KEY": "CG-test", "FRED_API_KEY": "k"})
         run_crypto(jobs.sf, jobs.providers, cfg, universes, today=TODAY, model=jobs.model)
         grade_crypto(jobs.sf, jobs.model, jobs.model_version_id, YESTERDAY, TODAY - timedelta(days=30))
@@ -91,8 +92,12 @@ def test_search_falls_back_to_coingecko_and_contract_addresses(client):
     assert d["remote"][0]["platform"] == "ethereum"
 
 
-def test_search_isin_explains_it_comes_later(client):
-    assert "ISIN" in client.get("/api/search?q=IE00B4L5Y983").json()["message"]
+def test_search_by_isin_and_us_ticker(client):
+    d = client.get("/api/search?q=US0000000AA1").json()
+    assert [(r["id"], r["source"]) for r in d["remote"]] == [("AAA", "sec")]
+    assert "niet bekend" in client.get("/api/search?q=IE00B4L5Y983").json()["message"]
+    d = client.get("/api/search?q=bnk").json()
+    assert ("BNK", "sec") in [(r["id"], r["source"]) for r in d["remote"]]
 
 
 def test_fetch_on_request_creates_and_grades_the_asset(client, db):  # noqa: F811

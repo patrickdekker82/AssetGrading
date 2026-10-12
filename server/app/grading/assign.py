@@ -33,3 +33,25 @@ def crypto_tags(categories: list[str] | None, alias_kinds: Iterable[str], cfg: A
         elif rule.alias_kind and rule.alias_kind in kinds:
             tags.append(tag)
     return sorted(tags)
+
+
+def _in(code: int | None, ranges) -> bool:
+    return code is not None and any(lo <= code <= hi for lo, hi in ranges)
+
+
+def assign_stock(key: str, sic: int | None, cfg: AssignmentConfig) -> tuple[str, list[str], str]:
+    """(template, tags, sector) for a stock: by SIC code, with manual overrides by asset key (slug)."""
+    rules = cfg.stocks
+    over = rules.overrides.get(key)
+    template, tags = rules.default, []
+    for rule in rules.rules:
+        if _in(sic, rule.sic):
+            template, tags = rule.template, [rule.tag] if rule.tag else []
+            break
+    sector = next((s.sector for s in rules.sectors if _in(sic, s.sic)), rules.default_sector)
+    if over:
+        if over.template:
+            template, tags = over.template, []   # a template override also replaces the rule's tag
+        tags = [over.tag] if over.tag else tags
+        sector = over.sector or sector
+    return template, tags, sector

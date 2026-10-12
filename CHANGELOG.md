@@ -1,5 +1,124 @@
 # Changelog
 
+## Fase 4 – Aandelen (2026-10-12)
+
+### Gebouwd
+
+- **Databronnen** (`config/providers.yaml`, `config/stocks.yaml`):
+  - **SEC EDGAR**: bedrijfslijst, registratiegegevens (SIC-code, land, publicaties) en `companyfacts`.
+  - **Tiingo** voor VS-koersen zodra `TIINGO_API_KEY` is ingevuld; tot dan **Yahoo Finance** (de
+    noodoplossing uit de prompt).
+  - **EODHD** als optionele, betaalde bron: alleen actief met `EODHD_API_KEY`.
+  - **OpenFIGI** voor ISIN naar ticker.
+- **Koersen** worden opgeslagen gecorrigeerd voor dividend en splitsingen (voor grafiek, momentum, bèta en
+  volatiliteit). Daarnaast wordt de slotkoers zoals verhandeld bewaard (voor de beurswaarde).
+  - Elke run leest de laatste tien dagen opnieuw. Verandert een oude gecorrigeerde koers, dan was er een
+    dividend of splitsing, en wordt de hele reeks opnieuw opgehaald.
+- **Fundamentele feiten met `available_at`** = de publicatiedatum bij SEC.
+  - Per financiële post staat een lijst XBRL-begrippen op volgorde van voorkeur; per periode wordt het
+    eerste begrip gebruikt dat een waarde heeft (bedrijven wisselen van begrip).
+  - Elke gepubliceerde versie blijft bewaard. Een herziening staat naast het origineel vanaf de dag dat
+    hij gepubliceerd werd.
+  - Kwartaalcijfers worden omgerekend naar de laatste twaalf maanden.
+- **Lijsten**:
+  - VS: de grootste SEC-registranten met een 10-K, gerangschikt op beurswaarde (verwaterd aantal aandelen
+    maal de slotkoers); de top 50 staat in de lijst.
+  - AEX: de 25 fondsen met ISIN uit `config/stocks.yaml`.
+  - Benchmarks: S&P 500 en AEX.
+- **Sectorindeling** uit de SIC-code (`config/model/assignment.yaml`), met handmatige uitzonderingen per
+  aandeel. Sjabloon:
+  - banken (SIC 6020–6036, 6111, 6199, 6211) en verzekeraars (risicodragers) → **Bank of verzekeraar**;
+  - SIC 6798 → **Vastgoedfonds (REIT)**;
+  - de rest → **Aandeel algemeen**.
+  - Vergelijking binnen de sector; een sector met minder dan acht aandelen valt terug op het hele sjabloon.
+- **Maatstaven**: brutowinst/activa, ROIC, margestabiliteit, Piotroski F, accruals, balansgroei,
+  EBIT/EV, vrije-kasstroomrendement, aandeelhoudersrendement, bèta, volatiliteit, nettoschuld/EBITDA,
+  rentedekking, Altman Z, Beneish M, omzet- en winstgroei en groeibestendigheid. Voor banken: ROTCE,
+  rentemarge, kosten/baten, leningen/deposito's, winst- en dividendrendement, en koers/tastbare
+  boekwaarde afgezet tegen ROTCE (een lijn door de vergelijkingsgroep).
+  - Waarderingen tellen voor 20% mee ten opzichte van de eigen historie van drie jaar. Die historie wordt
+    dag voor dag gereconstrueerd met alleen de cijfers die op die dag gepubliceerd waren.
+- **Technische score voor aandelen** met eigen parameters (`technical.yaml`, `params.stocks`):
+  - in de eigen valuta, met 252 handelsdagen per jaar;
+  - vergeleken met de index van de eigen markt.
+- **Grafiek voor aandelen** in eigen valuta, met de indicatorset uit hoofdstuk 7:
+  - in de score: 50/200 dagen, 10/40 weken, momentum 12-1, afstand tot de 52-weekshoogte en sterkte ten
+    opzichte van de index;
+  - context: RSI 14, MACD, volume ten opzichte van het gemiddelde, ATR en Bollinger.
+- **Taak `stocks`**: werkdagen 22:30 UTC, daarna de grades van de laatste beursdag.
+- **Interface**:
+  - tab Aandelen met de weergaven VS en AEX, VS top 50, AEX en Alle gevolgde, en filters op sector en
+    land;
+  - op de assetpagina sector, land en opmerkingen bij de data;
+  - zoeken op ISIN (OpenFIGI) en op VS-ticker of -naam (SEC);
+  - een VS-aandeel buiten de lijst ophalen en beoordelen op verzoek (3M: 21 seconden).
+- **Modelversie 0.3.0**:
+  - toewijzing en sectoren voor aandelen;
+  - `days_per_year` bij de technische parameters;
+  - de grades voor crypto zijn identiek aan die van 0.2.0 (gecontroleerd op peildatum 10 oktober).
+
+### Acceptatie (live gemeten op 12 oktober 2026, peildatum 9 oktober)
+
+- **50 VS-aandelen hebben een volledige grade:** 49 van de top 50 hebben een volledige grade.
+  - **GE Aerospace** staat op *voorlopig*: datadekking 58,5%, net onder de 60%. GE rapporteert bij SEC
+    geen rentelasten en geen brutowinst.
+  - Over alle 104 gevolgde aandelen: 81 met een grade, 4 voorlopig en 19 zonder grade (zie hieronder).
+- **Een bank loopt aantoonbaar door het banksjabloon:** JPMorgan (SIC 6021) krijgt het sjabloon Bank of
+  verzekeraar met het label bank.
+  - Op de pagina: ROTCE 19,8%, rentemarge 1,99%, kosten/baten 51,4%, leningen/deposito's 55,9%, en
+    koers/tastbare boekwaarde ten opzichte van de lijn door tien financials.
+  - De CET1-gate staat op *niet te controleren*: CET1 staat niet in de XBRL-cijfers.
+  - Bank of America, Wells Fargo, Citigroup, Goldman Sachs, Morgan Stanley, Schwab en American Express
+    gaan ook door het banksjabloon; ING en ABN AMRO via de handmatige toewijzing.
+  - Getest in `test_stocks.py`.
+- **Beneish en Altman kloppen met een handberekend voorbeeld** (`test_fundamentals.py`; de berekening
+  staat stap voor stap in het commentaar):
+  - Altman Z = 3,295 (gezond) en 0,466 (in nood, gate geraakt);
+  - Beneish M = −1,7813, net onder de drempel, en −1,6877 bij meer winst zonder kasstroom (gate geraakt,
+    hoogstens C).
+- `verify`: 165 van 165 opgeslagen grades zijn exact te herberekenen, aandelen inbegrepen.
+- Tests: 226 voor de rekenserver en 13 voor de webinterface.
+
+### Keuzes en afwijkingen
+
+- **Geen verzonnen cijfers.** Waar een gratis bron ontbreekt, blijft de maatstaf leeg en daalt de
+  datadekking:
+  - geen analistenverwachtingen, dus geen winstrevisies, verwachte winst of winstverrassing;
+  - geen short interest;
+  - geen CET1, probleemleningen, Solvency II of combined ratio;
+  - voor REITs geen FFO/AFFO, bezetting of huurgroei. Welltower krijgt daarom geen grade (15%).
+  - Aankopen door bestuurders (SEC Form 4) zijn wel gratis, maar nog niet gebouwd.
+- **Europese aandelen zonder SEC-registratie** (17 van de 25 AEX-fondsen) hebben geen gratis bron voor
+  jaarcijfers. Ze krijgen koersen en een technische score, maar geen grade.
+  - De acht met SEC-registratie (ASML, ING, Philips, RELX, Shell, Unilever, Aegon, ArcelorMittal) krijgen
+    een grade op basis van hun jaarverslag (20-F); bij Aegon en ING is die voorlopig.
+  - Dit is het punt waarvoor EODHD bedoeld is.
+- **Visa en Berkshire Hathaway** geven bij SEC geen aantal aandelen voor alle klassen samen. Daardoor:
+  - geen beurswaarde, en ze staan buiten de rangschikking op beurswaarde;
+  - Visa wordt voorlopig beoordeeld, Berkshire niet.
+  - Oplossing: `set-fact v shares_outstanding <aantal>`.
+- **Conventies** (in `fundamentals.py`):
+  - Een balanspost die twee jaar niet gerapporteerd is, telt als nul; XBRL laat posten weg die een bedrijf
+    niet heeft.
+  - EBIT = winst voor belasting plus rentelasten als er geen bedrijfsresultaat is gerapporteerd.
+  - Bij Beneish tellen de afschrijvings- en verkoopkostenindex als 1 als die posten ontbreken.
+  - Het aantal aandelen wordt gecontroleerd met nettowinst gedeeld door winst per aandeel. Dat vangt
+    McDonald's op, dat aandelen in miljoenen rapporteert.
+- **Beneish bij snelle groeiers:** de gate raakt Nvidia, Broadcom, Micron, Lam Research en Sandisk.
+  - Hun hoge omzetgroei (SGI) en hogere marges duwen de M-score omhoog; dat is een bekende zwakte van het
+    model bij hypergroei.
+  - De gate werkt zoals de prompt hem beschrijft. Een aanpassing is een modelkeuze voor jou.
+- **Verzekeraars** zijn beperkt tot risicodragers. Zorgverzekeraars (UnitedHealth, SIC 6324) en
+  vermogensbeheerders (BlackRock) worden als algemeen aandeel beoordeeld; anders zouden ze vrijwel
+  zonder maatstaven blijven.
+- **De AEX-samenstelling** is die van 31 december 2024; latere indexherzieningen zijn niet bevestigd.
+  - Werk `config/stocks.yaml` bij na elke herziening (mogelijk zijn Euronext en CVC erbij gekomen).
+  - De nieuwe ISIN van Unilever na de afsplitsing kon niet worden bevestigd en staat leeg.
+- **SEC vraagt een contactadres** in de User-Agent. Vul in `.env` bij `SEC_USER_AGENT` je eigen
+  e-mailadres in. Tijdens de bouw is een neutraal voorbeeldadres gebruikt.
+- **Ruimte:** de SEC-cijfers van 85 bedrijven en de koersgeschiedenis sinds 2009 zijn samen 625.000 rijen
+  (271 MB in `fundamental_fact`). SEC-antwoorden worden 45 dagen bewaard.
+
 ## Fase 3 – Interface en grafiek (2026-10-11)
 
 ### Gebouwd

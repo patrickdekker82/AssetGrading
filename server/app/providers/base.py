@@ -22,7 +22,7 @@ import httpx
 
 log = logging.getLogger(__name__)
 
-SECRET_PARAMS = {"api_key", "x_cg_demo_api_key"}
+SECRET_PARAMS = {"api_key", "x_cg_demo_api_key", "token", "api_token"}
 RETRY_STATUS = {429, 500, 502, 503, 504}
 
 
@@ -85,6 +85,8 @@ class Fact:
     value: Decimal
     unit: str
     call_id: int | None = None
+    # When the provider states when the value became public (an SEC filing date), it is stored as is.
+    available_at: datetime | None = None
 
 
 @dataclass
@@ -220,6 +222,13 @@ class Provider:
             raise BudgetExceeded(f"{self.name}: monthly budget {budget} reached ({used} used)")
 
     def get_json(self, path: str, params: dict[str, Any] | None = None, *, cost: int = 1) -> Response:
+        return self._request("GET", path, params, cost=cost)
+
+    def post_json(self, path: str, payload: Any, *, cost: int = 1) -> Response:
+        return self._request("POST", path, None, cost=cost, payload=payload)
+
+    def _request(self, method: str, path: str, params: dict[str, Any] | None, *, cost: int,
+                 payload: Any = None) -> Response:
         url = path if path.startswith("http") else f"{self.settings.base_url}{path}"
         logged_params = {k: v for k, v in (params or {}).items() if k not in SECRET_PARAMS} or None
         endpoint = path.split("?")[0] if not path.startswith("http") else httpx.URL(path).path
@@ -238,7 +247,10 @@ class Provider:
                 # An empty params dict would make httpx drop a query string already in the URL
                 # (pagination links), so pass None when there is nothing to add.
                 query = {**(params or {}), **self.auth_params()} or None
-                res = self.client.get(url, params=query, headers=self.auth_headers())
+                if method == "POST":
+                    res = self.client.post(url, params=query, json=payload, headers=self.auth_headers())
+                else:
+                    res = self.client.get(url, params=query, headers=self.auth_headers())
                 status, body = res.status_code, res.content
                 content_type = res.headers.get("content-type")
                 if status in RETRY_STATUS:

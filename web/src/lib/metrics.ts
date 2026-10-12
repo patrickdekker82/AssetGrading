@@ -29,10 +29,17 @@ const GROUP_NAMES: Record<string, string> = {
   crypto_defi: "DeFi-protocollen",
   crypto_utility: "Utility-tokens",
   crypto_rwa: "RWA-tokens",
+  stock_general: "alle aandelen (algemeen)",
+  stock_financial: "alle banken en verzekeraars",
+  stock_reit: "alle vastgoedfondsen",
 };
 
+/** Stocks compare within "template:sector"; a small sector falls back to the whole template. */
 export function groupName(group: string | null | undefined): string {
-  return group ? GROUP_NAMES[group] ?? group : "";
+  if (!group) return "";
+  const [template, sector] = group.split(":");
+  if (sector) return `sector ${sector}`;
+  return GROUP_NAMES[template] ?? template;
 }
 
 export function directionText(direction: string | null): string {

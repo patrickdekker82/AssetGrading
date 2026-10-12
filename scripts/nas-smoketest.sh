@@ -28,15 +28,23 @@ urls = {
     'FRED': 'https://api.stlouisfed.org/',
     'Binance futures (fase 2)': 'https://fapi.binance.com/fapi/v1/ping',
     'Bybit (fase 2)': 'https://api.bybit.com/v5/market/time',
+    'SEC EDGAR': 'https://data.sec.gov/submissions/CIK0000320193.json',
+    'Yahoo Finance': 'https://query1.finance.yahoo.com/v8/finance/chart/ASML.AS?range=5d&interval=1d',
+    'Tiingo': 'https://api.tiingo.com/',
+    'OpenFIGI': 'https://api.openfigi.com/v3/mapping',
 }
+# SEC requires a User-Agent with a contact; Yahoo refuses the default client name.
+headers = {'SEC EDGAR': {'User-Agent': 'Graadmeter smoketest admin@example.org'},
+           'Yahoo Finance': {'User-Agent': 'Mozilla/5.0 (compatible; Graadmeter)'}}
+# Without a key these answer with an error page or 'method not allowed'; any answer means reachable.
+any_answer = {'FRED', 'Tiingo', 'OpenFIGI'}
 bad = 0
 for name, url in urls.items():
     try:
-        code = httpx.get(url, timeout=15).status_code
+        code = httpx.get(url, timeout=15, headers=headers.get(name)).status_code
     except Exception as exc:
         code = type(exc).__name__
-    # FRED answers without a key with a redirect or an error page; any answer means reachable.
-    ok = isinstance(code, int) and code < 500 if name == 'FRED' else code == 200
+    ok = isinstance(code, int) and code < 500 if name in any_answer else code == 200
     later = 'fase 2' in name
     bad += not ok and not later
     label = 'ok  ' if ok else ('LET OP' if later else 'FOUT')

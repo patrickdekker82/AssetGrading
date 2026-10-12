@@ -1,0 +1,58 @@
+# Stock universes (chapter 2). Not part of the model version.
+#
+# United States: the largest US companies that file a 10-K with the SEC, ranked by market cap
+# (shares outstanding from SEC filings x latest price). Candidates come from SEC's company list, which is
+# ordered by size; foreign companies filing a 20-F are left out of this list.
+us:
+  candidates: 100                # how many of SEC's largest listings to consider (about 60 file a 10-K)
+  forms: ["10-K"]
+  benchmark: {slug: sp500, name: S&P 500, yahoo: "^GSPC"}
+  # A company with several share classes is followed once, under the ticker SEC lists first (GOOGL, BRK-B).
+  # Berkshire Hathaway reports its share count in Class A equivalents; one A share equals 1,500 B shares.
+  share_multiplier: {BRK-B: 1500}
+
+# AEX (Euronext Amsterdam). Composition as of 31 December 2024 (Euronext, via Wikipedia), ISINs checked
+# with OpenFIGI on 12 October 2026. Index reviews since then (one source lists 27 members in October 2026,
+# among them Euronext and CVC Capital Partners) are not confirmed: update this list after each review.
+aex:
+  verified_on: "2024-12-31"
+  benchmark: {slug: aex, name: AEX, yahoo: "^AEX"}
+  members:
+    - {name: ABN AMRO, isin: NL0011540547, ticker: ABN, yahoo: ABN.AS}
+    - {name: Adyen, isin: NL0012969182, ticker: ADYEN, yahoo: ADYEN.AS}
+    - {name: Aegon, isin: BMG0112X1056, ticker: AGN, yahoo: AGN.AS, sec_ticker: AEG}
+    - {name: Ahold Delhaize, isin: NL0011794037, ticker: AD, yahoo: AD.AS}
+    - {name: AkzoNobel, isin: NL0013267909, ticker: AKZA, yahoo: AKZA.AS}
+    - {name: ArcelorMittal, isin: LU1598757687, ticker: MT, yahoo: MT.AS, sec_ticker: MT}
+    - {name: ASM International, isin: NL0000334118, ticker: ASM, yahoo: ASM.AS}
+    - {name: ASML Holding, isin: NL0010273215, ticker: ASML, yahoo: ASML.AS, sec_ticker: ASML}
+    - {name: ASR Nederland, isin: NL0011872643, ticker: ASRNL, yahoo: ASRNL.AS}
+    - {name: BE Semiconductor Industries, isin: NL0012866412, ticker: BESI, yahoo: BESI.AS}
+    - {name: DSM-Firmenich, isin: CH1216478797, ticker: DSFIR, yahoo: DSFIR.AS}
+    - {name: Exor, isin: NL0012059018, ticker: EXO, yahoo: EXO.AS}
+    - {name: Heineken, isin: NL0000009165, ticker: HEIA, yahoo: HEIA.AS}
+    - {name: IMCD, isin: NL0010801007, ticker: IMCD, yahoo: IMCD.AS}
+    - {name: ING Groep, isin: NL0011821202, ticker: INGA, yahoo: INGA.AS, sec_ticker: ING}
+    - {name: KPN, isin: NL0000009082, ticker: KPN, yahoo: KPN.AS}
+    - {name: NN Group, isin: NL0010773842, ticker: NN, yahoo: NN.AS}
+    - {name: Philips, isin: NL0000009538, ticker: PHIA, yahoo: PHIA.AS, sec_ticker: PHG}
+    - {name: Prosus, isin: NL0013654783, ticker: PRX, yahoo: PRX.AS}
+    - {name: Randstad, isin: NL0000379121, ticker: RAND, yahoo: RAND.AS}
+    - {name: RELX, isin: GB00B2B0DG97, ticker: REN, yahoo: REN.AS, sec_ticker: RELX}
+    - {name: Shell, isin: GB00BP6MXD84, ticker: SHELL, yahoo: SHELL.AS, sec_ticker: SHEL}
+    - {name: Universal Music Group, isin: NL0015000IY2, ticker: UMG, yahoo: UMG.AS}
+    # Unilever's ISIN changed after the 2025 demerger; OpenFIGI could not confirm the new one, so it is
+    # left empty rather than guessed.
+    - {name: Unilever, isin: null, ticker: UNA, yahoo: UNA.AS, sec_ticker: UL, country: GB}
+    - {name: Wolters Kluwer, isin: NL0000395903, ticker: WKL, yahoo: WKL.AS}
+
+prices:
+  history_start: "2009-01-01"
+  # Preference order with fallback. Tiingo and EODHD are used only when their key is set in .env.
+  us_sources: [tiingo, eodhd, yahoo]
+  eu_sources: [eodhd, yahoo]
+  recheck_days: 10               # re-read the last days; a changed adjusted close means a split or dividend
+
+fundamentals:
+  history_start: "2009-01-01"
+  refresh_days: 30               # re-read company facts at least monthly, and after every new filing

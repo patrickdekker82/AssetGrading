@@ -58,6 +58,7 @@ class Metrics:
     provenance: dict[str, str] = field(default_factory=dict)
     flags: dict[str, bool | None] = field(default_factory=dict)
     raw: dict[str, float | None] = field(default_factory=dict)   # helper values shown on the asset page
+    notes: list[str] = field(default_factory=list)               # data remarks shown with the grade
 
     def set(self, metric: str, value: float | None, source: str) -> None:
         if value is not None and math.isfinite(value):

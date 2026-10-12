@@ -15,6 +15,8 @@ from app.providers.defillama import DefiLlamaProvider
 from app.providers.derivatives import BinanceFuturesProvider, BybitProvider, OkxProvider
 from app.providers.frankfurter import FrankfurterProvider
 from app.providers.fred import FredProvider
+from app.providers.sec import SecProvider
+from app.providers.stockprices import EodhdProvider, OpenFigiProvider, TiingoProvider, YahooProvider
 from app.providers.venues import (
     BitvavoProvider,
     CoinbaseBookProvider,
@@ -39,6 +41,11 @@ ADAPTERS: dict[str, type[Provider]] = {
     "dexscreener": DexScreenerProvider,
     "rugcheck": RugCheckProvider,
     "defillama_stablecoins": StablecoinSupplyProvider,
+    "sec": SecProvider,
+    "tiingo": TiingoProvider,
+    "eodhd": EodhdProvider,
+    "yahoo": YahooProvider,
+    "openfigi": OpenFigiProvider,
 }
 
 

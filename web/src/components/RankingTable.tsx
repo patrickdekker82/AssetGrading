@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { formatNumber } from "@/lib/format";
 import { applyFilters, EMPTY_FILTERS, type Filters, GRADE_ORDER, type SortKey, sortRows } from "@/lib/ranking";
-import { RANKING_COLUMNS } from "@/lib/tabs";
+import { RANKING_COLUMNS, tabForClass } from "@/lib/tabs";
 import { type GradeRow, GradeBadge } from "./GradeBadge";
 import { Sparkline } from "./Sparkline";
 import { Term } from "./Term";
@@ -25,6 +25,9 @@ export function RankingTable({ tab, views }: { tab: string; views: View[] }) {
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const view = views.find((v) => v.id === viewId) ?? views[0];
   const templates = useMemo(() => [...new Set(view.rows.map((r) => r.template))].sort(), [view]);
+  const sectors = useMemo(() => [...new Set(view.rows.map((r) => r.sector).filter(Boolean) as string[])].sort(), [view]);
+  const countries = useMemo(() => [...new Set(view.rows.map((r) => r.country).filter(Boolean) as string[])].sort(),
+    [view]);
   const ranked = useMemo(() => view.rows.map((r, i) => ({ ...r, rank: i + 1 })), [view]);
   const shown = useMemo(() => sortRows(applyFilters(ranked, filters), sort.key, sort.dir), [ranked, filters, sort]);
   const active = JSON.stringify(filters) !== JSON.stringify(EMPTY_FILTERS);
@@ -54,6 +57,20 @@ export function RankingTable({ tab, views }: { tab: string; views: View[] }) {
               </button>
             ))}
           </div>
+        )}
+        {sectors.length > 1 && (
+          <select className="filter" aria-label="Filter sector" value={filters.sector}
+            onChange={(e) => setFilters((f) => ({ ...f, sector: e.target.value }))}>
+            <option value="">Alle sectoren</option>
+            {sectors.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+        )}
+        {countries.length > 1 && (
+          <select className="filter" aria-label="Filter land" value={filters.country}
+            onChange={(e) => setFilters((f) => ({ ...f, country: e.target.value }))}>
+            <option value="">Alle landen</option>
+            {countries.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
         )}
         <label className="check">
           <input type="checkbox" checked={filters.changed}
@@ -124,14 +141,16 @@ export function RankingTable({ tab, views }: { tab: string; views: View[] }) {
             )}
             {shown.map((r) => {
               const none = r.status === "no_grade";
-              const href = `/${tab === "watchlist" ? r.asset_class : tab}/${r.id}`;
+              const href = `/${tab === "watchlist" ? tabForClass(r.asset_class) : tab}/${r.id}`;
               return (
                 <tr key={r.id} className={none ? "row-muted" : undefined}>
                   <td className="num">{r.rank}</td>
                   <td>
                     <Link href={href} className="name-cell row-link">
                       <span>{r.name}</span>
-                      <span className="muted small">{r.template}</span>
+                      <span className="muted small">
+                        {r.template}{r.sector ? ` · ${r.sector}` : ""}{r.country ? ` · ${r.country}` : ""}
+                      </span>
                     </Link>
                   </td>
                   <td>{r.ticker}</td>

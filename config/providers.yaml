@@ -87,6 +87,38 @@ providers:
     raw_retention_days: 400
     attribution: "Bron: FRED, Federal Reserve Bank of St. Louis"
 
+  sec:
+    base_url: https://data.sec.gov
+    # SEC allows 10 requests per second and requires a User-Agent with a contact (SEC_USER_AGENT in .env).
+    rate_limit: {calls: 5, per_seconds: 1}
+    monthly_budget: null
+    raw_retention_days: 45       # company facts are several MB per company; re-read monthly anyway
+  tiingo:
+    base_url: https://api.tiingo.com
+    api_key_env: TIINGO_API_KEY
+    # Free plan: 1,000 requests a day, 50 an hour, 500 distinct tickers a month.
+    rate_limit: {calls: 45, per_seconds: 3600}
+    monthly_budget: 20000
+    raw_retention_days: 400
+  eodhd:
+    base_url: https://eodhd.com/api
+    api_key_env: EODHD_API_KEY
+    # Paid (optional). Used only when the key is set.
+    rate_limit: {calls: 10, per_seconds: 1}
+    monthly_budget: 90000
+    raw_retention_days: 400
+  yahoo:
+    base_url: https://query1.finance.yahoo.com
+    # Unofficial and sometimes blocked: kept slow on purpose.
+    rate_limit: {calls: 1, per_seconds: 2}
+    monthly_budget: null
+    raw_retention_days: 90
+  openfigi:
+    base_url: https://api.openfigi.com
+    rate_limit: {calls: 20, per_seconds: 60}
+    monthly_budget: null
+    raw_retention_days: 400
+
 crypto:
   history_start: "2017-01-01"        # enough for the 200-week average and 3-year volatility history
   markets_page_size: 250             # one CoinGecko call covers the top 250 for membership history
@@ -140,3 +172,4 @@ schedule:                            # UTC
   # Use day names: APScheduler numbers weekdays from Monday = 0, unlike standard cron.
   fx_macro: "30 16 * * mon-fri"      # after the ECB reference rates (around 16:00 CET)
   prune_raw: "30 3 * * *"
+  stocks: "30 22 * * mon-fri"        # well after the US close (16:00 New York = 20:00 or 21:00 UTC)

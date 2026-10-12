@@ -39,6 +39,61 @@ CRYPTO_INDICATORS = [
 
 DEFAULT_ON = {"sma50", "sma200", "sma20w", "sma200w"}
 
+# Stocks: technical.yaml chart_sets.stocks. A sector index (rs_sector) and an earnings-anchored VWAP need
+# data no free source offers; they are left out rather than approximated.
+STOCK_INDICATORS = [
+    IndicatorDef("sma50", "Gemiddelde 50 dagen", "price", "score", "#2962ff"),
+    IndicatorDef("sma200", "Gemiddelde 200 dagen", "price", "score", "#e91e63"),
+    IndicatorDef("sma10w", "Gemiddelde 10 weken", "price", "score", "#ff9800"),
+    IndicatorDef("sma40w", "Gemiddelde 40 weken", "price", "score", "#7b1fa2"),
+    IndicatorDef("mom_12_1", "Momentum 12-1 maanden (%)", "mom", "score", "#00897b"),
+    IndicatorDef("dist_52w_high", "Afstand tot 52-weekshoogte (%)", "high", "score", "#5d4037"),
+    IndicatorDef("rs_index", "Sterkte t.o.v. index", "rs", "score", "#3949ab"),
+    IndicatorDef("rsi14", "RSI 14", "rsi", "context", "#6a1b9a"),
+    IndicatorDef("macd", "MACD 12-26", "macd", "context", "#1565c0"),
+    IndicatorDef("macd_signal", "MACD-signaallijn 9", "macd", "context", "#ef6c00"),
+    IndicatorDef("volume_vs_sma50", "Volume t.o.v. 50-daags gemiddelde", "volume_ratio", "context", "#2e7d32"),
+    IndicatorDef("atr_pct", "ATR 14 in %", "atr", "context", "#455a64"),
+    IndicatorDef("bb_upper", "Bollinger boven (20, 2)", "price", "context", "#90a4ae"),
+    IndicatorDef("bb_lower", "Bollinger onder (20, 2)", "price", "context", "#90a4ae"),
+]
+
+STOCK_DEFAULT_ON = {"sma50", "sma200"}
+
+
+def stock_indicators(ohlc: pd.DataFrame, benchmark: pd.Series | None) -> dict[str, pd.Series]:
+    """`ohlc` in the stock's own currency, adjusted for splits and dividends."""
+    close = ohlc["close"].astype(float)
+    c = close.to_numpy(dtype=np.float64)
+    weekly = week_end(close)
+    w = weekly.to_numpy(dtype=np.float64)
+    out: dict[str, pd.Series] = {
+        "sma50": _clean(talib.SMA(c, 50), close.index),
+        "sma200": _clean(talib.SMA(c, 200), close.index),
+        "sma10w": _clean(talib.SMA(w, 10), weekly.index).reindex(close.index).ffill(),
+        "sma40w": _clean(talib.SMA(w, 40), weekly.index).reindex(close.index).ffill(),
+        "rsi14": _clean(talib.RSI(c, 14), close.index),
+    }
+    # 12-1 momentum: return from twelve months ago to one month ago (about 252 and 21 trading days).
+    out["mom_12_1"] = (close.shift(21) / close.shift(252) - 1) * 100
+    out["dist_52w_high"] = (close / close.rolling(252, min_periods=200).max() - 1) * 100
+    if benchmark is not None and not benchmark.empty:
+        out["rs_index"] = close / benchmark.reindex(close.index).ffill()
+    macd, signal, _ = talib.MACD(c, 12, 26, 9)
+    out["macd"], out["macd_signal"] = _clean(macd, close.index), _clean(signal, close.index)
+    if "volume" in ohlc and ohlc["volume"].notna().sum() > 50:
+        vol = ohlc["volume"].astype(float)
+        out["volume_vs_sma50"] = vol / vol.rolling(50).mean()
+    if ohlc[["high", "low"]].notna().all(axis=1).sum() > 14:
+        hl = ohlc.dropna(subset=["high", "low"])
+        atr = talib.ATR(hl["high"].to_numpy(np.float64), hl["low"].to_numpy(np.float64),
+                        hl["close"].to_numpy(np.float64), 14)
+        out["atr_pct"] = _clean(atr, hl.index) / hl["close"] * 100
+    upper, _, lower = talib.BBANDS(c, 20, 2, 2)
+    out["bb_upper"], out["bb_lower"] = _clean(upper, close.index), _clean(lower, close.index)
+    cleaned = {k: v.dropna() for k, v in out.items()}
+    return {k: v for k, v in cleaned.items() if not v.empty}
+
 
 def _clean(values: np.ndarray, index) -> pd.Series:
     s = pd.Series(values, index=index, dtype=float)

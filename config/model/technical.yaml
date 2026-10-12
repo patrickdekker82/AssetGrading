@@ -39,6 +39,22 @@ params:
     volatility_history: 1095
     min_block_coverage: 0.5      # technical score is missing when less than half the block weight is available
     benchmark: bitcoin
+    days_per_year: 365
+  stocks:                        # windows in calendar days; volatility annualised over 252 trading days
+    sma_short: 50
+    sma_long: 200
+    sma_long_rising_lag: 20
+    months_for_10m_average: 10
+    momentum_long: 365
+    momentum_skip: 30
+    momentum_short: 182
+    high_window: 364
+    relative_windows: [91, 182, 365]
+    volatility_window: 91
+    volatility_history: 1095
+    min_block_coverage: 0.5
+    benchmark: market_index      # S&P 500 for US stocks, AEX for Dutch stocks
+    days_per_year: 252
 
 rules:
   completed_periods_only: true

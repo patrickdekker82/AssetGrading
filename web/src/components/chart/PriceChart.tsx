@@ -34,6 +34,8 @@ export type ChartData = {
   markers: { time: string; text: string }[];
   gate_zones: { start: string; end: string; labels: string[] }[];
   tradingview_symbol: string;
+  currency?: string;
+  adjusted?: boolean;
 };
 
 const INTERVALS = [{ id: "1d", label: "Dag" }, { id: "1w", label: "Week" }, { id: "1M", label: "Maand" }];
@@ -288,6 +290,12 @@ export function PriceChart({ assetId }: { assetId: string }) {
           {showTv ? "Eigen grafiek" : "Tweede mening (TradingView)"}
         </button>
       </div>
+      {data?.currency && !showTv && (
+        <p className="muted small">
+          Koersen in {data.currency}
+          {data.adjusted && <>, <Term id="gecorrigeerde_koers">gecorrigeerd voor dividend en splitsingen</Term></>}.
+        </p>
+      )}
       {data && !showTv && (
         <div className="indicator-bar">
           {(["score", "context"] as const).map((group) => (

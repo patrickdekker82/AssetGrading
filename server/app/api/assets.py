@@ -13,10 +13,13 @@ from sqlalchemy.dialects.postgresql import insert
 from app.charting.indicators import (
     CRYPTO_INDICATORS,
     DEFAULT_ON,
+    STOCK_DEFAULT_ON,
+    STOCK_INDICATORS,
     aggregate_ohlc,
     daily_indicators,
     sample,
     sig,
+    stock_indicators,
     to_points,
 )
 from app.grading.crypto import grade_crypto
@@ -43,7 +46,7 @@ def _labels(request: Request) -> dict[str, str]:
 
 
 def _asset(session, key: str) -> Asset:
-    asset = session.scalar(select(Asset).where(Asset.coingecko_id == key))
+    asset = session.scalar(select(Asset).where(Asset.slug == key))
     if asset is None:
         raise HTTPException(404, "Asset niet gevonden")
     return asset
@@ -78,7 +81,8 @@ def asset_detail(key: str, request: Request) -> dict:
         watched = session.get(WatchlistItem, asset.id) is not None
     out = {
         "asset": {
-            "id": asset.coingecko_id, "name": asset.name, "ticker": asset.symbol, "asset_class": asset.asset_class,
+            "id": asset.slug, "name": asset.name, "ticker": asset.symbol, "asset_class": asset.asset_class,
+            "sector": asset.sector, "country": asset.country,
             "categories": asset.categories or [], "aliases": aliases, "tracked": asset.tracked,
             "in_watchlist": watched, "price_sources": asset.price_sources or [],
         },
@@ -117,6 +121,7 @@ def asset_detail(key: str, request: Request) -> dict:
         "btc_relative": res.get("btc_relative"),
         "horizon_months": template.horizon_months or config.settings.default_horizon_months,
         "notes": res.get("notes", []), "technical": inputs.get("technical"),
+        "data_notes": inputs.get("notes", []),
     }
     out["pillars"] = pillars
     out["gates"] = res.get("gates", [])
@@ -149,16 +154,34 @@ def clear_chart_cache() -> None:
     _chart_cache.clear()
 
 
+def _benchmark_for(session, asset: Asset) -> tuple[str | None, str | None]:
+    """(slug, name) of the series an asset's chart is compared with."""
+    if asset.asset_class == "crypto":
+        return ("bitcoin", "Bitcoin") if asset.slug != "bitcoin" else (None, None)
+    if asset.asset_class == "stock":
+        us = session.execute(text("SELECT 1 FROM asset_alias WHERE asset_id = :a AND kind = 'us_ticker'"),
+                             {"a": asset.id}).first()
+        return ("sp500", "S&P 500") if us else ("aex", "AEX")
+    return None, None
+
+
 def _build_chart(key: str, interval: str, jobs) -> dict:
     with jobs.sf() as session:
         asset = _asset(session, key)
+        stock = asset.asset_class in ("stock", "index")
         conn = session.connection()
+        # Stocks are charted in their own currency (adjusted for splits and dividends), crypto in euro.
+        cols = ("open_eur AS open, high_eur AS high, low_eur AS low, close_eur AS close" if not stock else
+                "close_native * open_eur / close_eur AS open, close_native * high_eur / close_eur AS high, "
+                "close_native * low_eur / close_eur AS low, close_native AS close")
         prices = pd.read_sql(text(
-            "SELECT ts, open_eur AS open, high_eur AS high, low_eur AS low, close_eur AS close, volume "
-            "FROM price_daily_eur WHERE asset_id = :a ORDER BY ts"), conn, params={"a": asset.id})
+            f"SELECT ts, {cols}, volume, quote_currency FROM price_daily_eur WHERE asset_id = :a ORDER BY ts"),
+            conn, params={"a": asset.id})
+        bench_slug, bench_name = _benchmark_for(session, asset)
+        bench_col = "close_native" if stock else "close_eur"
         bench = pd.read_sql(text(
-            "SELECT p.ts, p.close_eur FROM price_daily_eur p JOIN asset a ON a.id = p.asset_id "
-            "WHERE a.coingecko_id = 'bitcoin' ORDER BY p.ts"), conn)
+            f"SELECT p.ts, p.{bench_col} AS close FROM price_daily_eur p JOIN asset a ON a.id = p.asset_id "
+            "WHERE a.slug = :b ORDER BY p.ts"), conn, params={"b": bench_slug or ""})
         facts = pd.read_sql(text(
             """
             SELECT DISTINCT ON (field, source, as_of) field, source, as_of, value::float8 AS value
@@ -172,11 +195,13 @@ def _build_chart(key: str, interval: str, jobs) -> dict:
     if prices.empty:
         return {"candles": [], "volume": [], "indicators": {}, "catalog": [], "benchmark": None, "markers": [],
                 "gate_zones": []}
+    currency = "EUR" if not stock else str(prices["quote_currency"].iloc[-1])
+    prices = prices.drop(columns="quote_currency")
     prices["ts"] = pd.to_datetime(prices["ts"]).dt.date
     ohlc = prices.set_index("ts").astype(float)
     benchmark = None
-    if not bench.empty and key != "bitcoin":
-        benchmark = pd.Series(bench["close_eur"].astype(float).to_numpy(), index=pd.to_datetime(bench["ts"]).dt.date)
+    if not bench.empty:
+        benchmark = pd.Series(bench["close"].astype(float).to_numpy(), index=pd.to_datetime(bench["ts"]).dt.date)
 
     def fact_series(field: str) -> pd.Series | None:
         df = facts[facts["field"] == field]
@@ -186,7 +211,11 @@ def _build_chart(key: str, interval: str, jobs) -> dict:
         df = df[df["source"] == best]
         return pd.Series(df["value"].to_numpy(dtype=float), index=list(df["as_of"]))
 
-    ind = daily_indicators(ohlc, benchmark, fact_series("funding_rate_daily"), fact_series("open_interest_usd"))
+    if stock:
+        ind, defs, default_on = stock_indicators(ohlc, benchmark), STOCK_INDICATORS, STOCK_DEFAULT_ON
+    else:
+        ind = daily_indicators(ohlc, benchmark, fact_series("funding_rate_daily"), fact_series("open_interest_usd"))
+        defs, default_on = CRYPTO_INDICATORS, DEFAULT_ON
     candles = aggregate_ohlc(ohlc, interval)
     candle_rows = []
     for d, r in candles.iterrows():
@@ -219,15 +248,27 @@ def _build_chart(key: str, interval: str, jobs) -> dict:
         else:
             current = None
     catalog = [{**d.__dict__, "available": d.id in indicators and bool(indicators[d.id]),
-                "default_on": d.id in DEFAULT_ON} for d in CRYPTO_INDICATORS]
+                "default_on": d.id in default_on} for d in defs]
     return {"interval": interval, "candles": candle_rows, "volume": volume, "indicators": indicators,
-            "catalog": catalog, "benchmark": bench_points, "benchmark_name": "Bitcoin" if bench_points else None,
-            "markers": markers, "gate_zones": zones,
+            "catalog": catalog, "benchmark": bench_points, "benchmark_name": bench_name if bench_points else None,
+            "markers": markers, "gate_zones": zones, "currency": currency, "adjusted": stock,
             "tradingview_symbol": _tradingview_symbol(asset)}
 
 
+TRADINGVIEW_INDEX = {"sp500": "SP:SPX", "aex": "EURONEXT:AEX"}
+
+
 def _tradingview_symbol(asset: Asset) -> str:
-    return f"COINBASE:{asset.symbol}EUR" if asset.symbol else ""
+    if asset.asset_class == "crypto":
+        return f"COINBASE:{asset.symbol}EUR" if asset.symbol else ""
+    if asset.asset_class == "index":
+        return TRADINGVIEW_INDEX.get(asset.slug or "", "")
+    if asset.slug and asset.slug.endswith("-as"):
+        return f"EURONEXT:{asset.symbol}"
+    return asset.symbol.replace("-", ".") if asset.symbol else ""
+
+
+TICKER = re.compile(r"^[A-Za-z]{1,5}([.-][A-Za-z])?$")
 
 
 @router.get("/search")
@@ -239,32 +280,93 @@ def search(request: Request, q: str) -> dict:
     with jobs.sf() as session:
         local = session.execute(text(
             """
-            SELECT DISTINCT a.coingecko_id AS id, a.name, a.symbol AS ticker, a.asset_class, a.tracked,
+            SELECT DISTINCT a.slug AS id, a.name, a.symbol AS ticker, a.asset_class, a.tracked,
                    (SELECT letter FROM grade_snapshot g WHERE g.asset_id = a.id AND g.model_version_id = :v
                     ORDER BY as_of DESC LIMIT 1) AS letter,
                    (SELECT status FROM grade_snapshot g WHERE g.asset_id = a.id AND g.model_version_id = :v
                     ORDER BY as_of DESC LIMIT 1) AS status
             FROM asset a LEFT JOIN asset_alias al ON al.asset_id = a.id
-            WHERE a.name ILIKE :like OR a.symbol ILIKE :q OR a.coingecko_id = :lower OR al.value = :q
+            WHERE a.name ILIKE :like OR a.symbol ILIKE :q OR a.slug = :lower OR al.value = :q OR al.value = :upper
             ORDER BY a.tracked DESC, a.name LIMIT 20
-            """), {"like": f"%{q}%", "q": q, "lower": q.lower(), "v": jobs.model_version_id}).mappings().all()
+            """), {"like": f"%{q}%", "q": q, "lower": q.lower(), "v": jobs.model_version_id,
+                   "upper": q.upper()}).mappings().all()
     local = [dict(r) for r in local]
     remote, message = [], None
+    if any(r["tracked"] for r in local):
+        return {"local": local, "remote": [], "message": None}
+    errors = []
     if ISIN.match(q.upper()):
-        message = "Zoeken op ISIN werkt zodra aandelen en ETF's zijn aangesloten (fase 4 en 5)."
-    elif not any(r["tracked"] for r in local):
+        remote, message = _isin_lookup(jobs, q.upper(), local)
+        tracked = _tracked_stocks(jobs, [r["id"] for r in remote if r.get("source") == "sec"])
+        if tracked:
+            return {"local": tracked, "remote": [], "message": None}
+    else:
         try:
             if EVM_ADDRESS.match(q) or (SOLANA_ADDRESS.match(q) and not q.isalpha()):
                 remote = _contract_lookup(jobs, q)
             else:
-                remote = jobs.providers.coingecko.search(q)[:10]
+                remote = [{**r, "source": "coingecko"} for r in jobs.providers.coingecko.search(q)[:10]]
         except ProviderError as exc:
-            message = f"Zoeken bij CoinGecko lukte niet: {exc}"
-        known = {r["id"] for r in local}
-        remote = [r for r in remote if r.get("id") and r["id"] not in known]
-        if not local and not remote and message is None:
-            message = "Deze asset staat in geen enkele bron. Er is daarom geen grade."
+            errors.append(f"CoinGecko: {exc}")
+        try:
+            remote = _sec_lookup(jobs, q) + remote
+        except ProviderError as exc:
+            errors.append(f"SEC: {exc}")
+    known = {r["id"] for r in local}
+    remote = [r for r in remote if r.get("id") and r["id"] not in known]
+    if errors and not remote:
+        message = "Zoeken lukte niet bij " + "; ".join(errors)
+    if not local and not remote and message is None:
+        message = "Deze asset staat in geen enkele bron. Er is daarom geen grade."
     return {"local": local, "remote": remote, "message": message}
+
+
+def _tracked_stocks(jobs, tickers: list[str]) -> list[dict]:
+    """Followed stocks among US tickers found for an ISIN (the ISIN itself is not stored for US stocks)."""
+    if not tickers:
+        return []
+    with jobs.sf() as session:
+        return [dict(r) for r in session.execute(text(
+            """
+            SELECT a.slug AS id, a.name, a.symbol AS ticker, a.asset_class, a.tracked,
+                   (SELECT letter FROM grade_snapshot g WHERE g.asset_id = a.id AND g.model_version_id = :v
+                    ORDER BY as_of DESC LIMIT 1) AS letter,
+                   (SELECT status FROM grade_snapshot g WHERE g.asset_id = a.id AND g.model_version_id = :v
+                    ORDER BY as_of DESC LIMIT 1) AS status
+            FROM asset a JOIN asset_alias al ON al.asset_id = a.id AND al.kind = 'us_ticker'
+            WHERE al.value = ANY(:t) AND a.tracked
+            """), {"t": tickers, "v": jobs.model_version_id}).mappings()]
+
+
+def _sec_lookup(jobs, q: str) -> list[dict]:
+    """US companies by exact ticker, or by name for longer queries."""
+    rows = jobs.providers.get("sec").company_tickers()
+    hits = [r for r in rows if r["ticker"] == q.upper()] if TICKER.match(q) else []
+    if len(q) >= 4:
+        hits += [r for r in rows if q.lower() in r["title"].lower() and r not in hits][:5]
+    return [{"id": r["ticker"], "name": r["title"].title() if r["title"].isupper() else r["title"],
+             "symbol": r["ticker"], "market_cap_rank": None, "source": "sec"} for r in hits[:6]]
+
+
+def _isin_lookup(jobs, isin: str, local: list[dict]) -> tuple[list[dict], str | None]:
+    """An ISIN that is not known locally: OpenFIGI gives the tickers; a US listing can be fetched via SEC."""
+    try:
+        listings = jobs.providers.get("openfigi").isin(isin)
+    except ProviderError as exc:
+        return [], f"OpenFIGI gaf geen antwoord: {exc}"
+    if not listings:
+        return [], "Dit ISIN is bij OpenFIGI niet bekend. Er is daarom geen grade."
+    us = [x["ticker"] for x in listings if x.get("exchCode") == "US" and x.get("ticker")]
+    if us:
+        try:
+            hits = _sec_lookup(jobs, us[0].replace("/", "-"))
+        except ProviderError:
+            hits = []
+        if hits:
+            return hits, None
+    name = listings[0].get("name") or isin
+    return [], (f"{name} is gevonden bij OpenFIGI, maar heeft geen notering met SEC-cijfers. Voor Europese "
+                "aandelen buiten de AEX is geen gratis bron met jaarcijfers; er is daarom geen grade.")
 
 
 def _contract_lookup(jobs, address: str) -> list[dict]:
@@ -272,18 +374,23 @@ def _contract_lookup(jobs, address: str) -> list[dict]:
     for platform in platforms:
         found = jobs.providers.coingecko.by_contract(platform, address)
         if found and found.get("id"):
-            return [{**found, "market_cap_rank": None, "platform": platform}]
+            return [{**found, "market_cap_rank": None, "platform": platform, "source": "coingecko"}]
     return []
 
 
 class FetchRequest(BaseModel):
-    coingecko_id: str
+    coingecko_id: str | None = None
+    ticker: str | None = None      # a US stock (SEC)
 
 
 @router.post("/assets/fetch")
 def fetch_asset(body: FetchRequest, request: Request) -> dict:
-    """Fetch, store and grade one coin on request. Takes up to a minute (provider rate limits)."""
+    """Fetch, store and grade one asset on request. Takes up to a minute (provider rate limits)."""
     jobs = _ctx(request)
+    if body.ticker:
+        return _fetch_stock(jobs, body.ticker)
+    if not body.coingecko_id:
+        raise HTTPException(400, "Geef coingecko_id of ticker op")
     asset_id, report = ingest_single(jobs.sf, jobs.providers, jobs.cfg, jobs.universes, body.coingecko_id, jobs.model)
     if asset_id is None:
         raise HTTPException(404, "Deze munt staat niet bij CoinGecko. Er is daarom geen grade.")
@@ -294,7 +401,25 @@ def fetch_asset(body: FetchRequest, request: Request) -> dict:
     graded = grade_crypto(jobs.sf, jobs.model, jobs.model_version_id, as_of,
                           date.fromisoformat(jobs.cfg.crypto.history_start))
     clear_chart_cache()
-    return {"id": body.coingecko_id, "errors": report.errors + graded.errors,
+    return {"id": body.coingecko_id, "tab": "crypto", "errors": report.errors + graded.errors,
+            "snapshots_added": graded.counts.get("snapshots_added", 0)}
+
+
+def _fetch_stock(jobs, ticker: str) -> dict:
+    from app.grading.stocks import grade_stocks
+    from app.ingest.stocks import ingest_single_stock
+    from app.jobs import last_trading_day
+
+    asset_id, report = ingest_single_stock(jobs.sf, jobs.providers, jobs.cfg, jobs.stocks, jobs.universes,
+                                           jobs.model, ticker)
+    if asset_id is None:
+        raise HTTPException(404, "Geen Amerikaans aandeel met een 10-K bij SEC onder deze ticker. "
+                                 "Er is daarom geen grade.")
+    graded = grade_stocks(jobs.sf, jobs.model, jobs.model_version_id, jobs.stocks, last_trading_day(datetime.now(UTC)))
+    clear_chart_cache()
+    with jobs.sf() as session:
+        slug = session.get(Asset, asset_id).slug
+    return {"id": slug, "tab": "stocks", "errors": report.errors + graded.errors,
             "snapshots_added": graded.counts.get("snapshots_added", 0)}
 
 
@@ -302,7 +427,7 @@ def fetch_asset(body: FetchRequest, request: Request) -> dict:
 def watchlist(request: Request) -> list[str]:
     with _ctx(request).sf() as session:
         return list(session.execute(text(
-            "SELECT a.coingecko_id FROM watchlist_item w JOIN asset a ON a.id = w.asset_id ORDER BY w.added_at"
+            "SELECT a.slug FROM watchlist_item w JOIN asset a ON a.id = w.asset_id ORDER BY w.added_at"
         )).scalars())
 
 
