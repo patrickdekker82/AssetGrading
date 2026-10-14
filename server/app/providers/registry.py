@@ -13,10 +13,17 @@ from app.providers.coinmetrics import CoinMetricsProvider
 from app.providers.config import ProvidersConfig
 from app.providers.defillama import DefiLlamaProvider
 from app.providers.derivatives import BinanceFuturesProvider, BybitProvider, OkxProvider
+from app.providers.ecb import EcbProvider
 from app.providers.frankfurter import FrankfurterProvider
 from app.providers.fred import FredProvider
 from app.providers.sec import SecProvider
-from app.providers.stockprices import EodhdProvider, OpenFigiProvider, TiingoProvider, YahooProvider
+from app.providers.stockprices import (
+    EodhdProvider,
+    OpenFigiProvider,
+    TiingoProvider,
+    YahooFundProvider,
+    YahooProvider,
+)
 from app.providers.venues import (
     BitvavoProvider,
     CoinbaseBookProvider,
@@ -46,6 +53,8 @@ ADAPTERS: dict[str, type[Provider]] = {
     "eodhd": EodhdProvider,
     "yahoo": YahooProvider,
     "openfigi": OpenFigiProvider,
+    "ecb": EcbProvider,
+    "yahoo_fund": YahooFundProvider,
 }
 
 

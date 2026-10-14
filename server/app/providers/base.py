@@ -224,11 +224,15 @@ class Provider:
     def get_json(self, path: str, params: dict[str, Any] | None = None, *, cost: int = 1) -> Response:
         return self._request("GET", path, params, cost=cost)
 
+    def get_text(self, path: str, params: dict[str, Any] | None = None, *, cost: int = 1) -> Response:
+        """Like get_json, for providers that answer in CSV or another text format."""
+        return self._request("GET", path, params, cost=cost, text_body=True)
+
     def post_json(self, path: str, payload: Any, *, cost: int = 1) -> Response:
         return self._request("POST", path, None, cost=cost, payload=payload)
 
     def _request(self, method: str, path: str, params: dict[str, Any] | None, *, cost: int,
-                 payload: Any = None) -> Response:
+                 payload: Any = None, text_body: bool = False) -> Response:
         url = path if path.startswith("http") else f"{self.settings.base_url}{path}"
         logged_params = {k: v for k, v in (params or {}).items() if k not in SECRET_PARAMS} or None
         endpoint = path.split("?")[0] if not path.startswith("http") else httpx.URL(path).path
@@ -267,6 +271,9 @@ class Provider:
                 duration_ms=duration_ms, started_at=started,
             )
             if error is None:
+                if text_body:
+                    return Response(data=(body or b"").decode("utf-8", "replace"), call_id=call_id,
+                                    status_code=status or 0, headers=dict(res.headers))
                 try:
                     data = json.loads(body or b"null")
                 except ValueError as exc:

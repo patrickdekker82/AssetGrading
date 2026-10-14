@@ -111,6 +111,13 @@ def fake_markets(request: httpx.Request) -> httpx.Response:
         if isin == "US0000000AA1":
             return httpx.Response(200, json=[{"data": [{"ticker": "AAA", "exchCode": "US", "name": "AAA CORP"}]}])
         return httpx.Response(200, json=[{"warning": "No identifier found."}])
+    if host == "fc.yahoo.com":
+        return httpx.Response(404, text="not found")
+    if path == "/v1/test/getcrumb":
+        return httpx.Response(200, text="crumb123")
+    if host == "query2.finance.yahoo.com" and "quoteSummary" in path:
+        holdings = [{"holdingName": f"H{i}", "holdingPercent": {"raw": 0.05}} for i in range(10)]
+        return httpx.Response(200, json={"quoteSummary": {"result": [{"topHoldings": {"holdings": holdings}}]}})
     if host == "query1.finance.yahoo.com":
         symbol = path.rsplit("/", 1)[1]
         q = request.url.params
@@ -124,12 +131,13 @@ def stock_world(config_dir, db):  # noqa: F811
     fx = cfg.fx.model_copy(update={"history_start": (TODAY - timedelta(days=HISTORY_DAYS + 10)).isoformat()})
     fast = {name: e.model_copy(update={"rate_limit": {"calls": 10_000, "per_seconds": 1}})
             for name, e in cfg.providers.items()}
-    cfg = cfg.model_copy(update={"fx": fx, "providers": fast})
+    macro = cfg.macro.model_copy(update={"history_start": (TODAY - timedelta(days=800)).isoformat()})
+    cfg = cfg.model_copy(update={"fx": fx, "providers": fast, "macro": macro})
     stocks = load_stocks_config(config_dir / "stocks.yaml")
     aex = stocks.aex.model_copy(update={"members": [m for m in stocks.aex.members if m.ticker in ("ABN", "HEIA")]})
     stocks = stocks.model_copy(update={"aex": aex})
     providers = Providers(cfg, DbRecorder(db[1]), client=httpx.Client(transport=httpx.MockTransport(fake_markets)),
-                          sleep=lambda s: None, env={"SEC_USER_AGENT": "test test@example.org"})
+                          sleep=lambda s: None, env={"SEC_USER_AGENT": "test test@example.org", "FRED_API_KEY": "k"})
     DIVIDEND_FACTOR["value"] = 1.0
     return cfg, providers, stocks, load_universes(config_dir / "universes.yaml")
 

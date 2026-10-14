@@ -1,7 +1,7 @@
 # Graadmeter - global model settings.
 # Every change anywhere under config/model/ requires a new `version`
 # and a refreshed entry in versions.lock.yaml (see README, "Modelversie").
-version: "0.3.0"
+version: "0.4.0"
 description: Startgewichten uit de bouwprompt (hoofdstuk 5 en 6), nog niet geijkt; grading-engine en cryptotoewijzing; aandelen.
 
 default_horizon_months: [6, 12]
@@ -46,15 +46,39 @@ stability:
   hysteresis_days: 5             # ... or stays across the bound for 5 trading days
   band_weight_shift: 0.20        # bandwidth: every weight +/- 20%
 
+# Market regime (chapter 5). Decided once a week, on the completed week (Friday), and stored for every day.
+# Each input votes +1 (calm), 0 or -1 (stress); the sum decides the state.
 regime:
   states: [risk_on, neutral, risk_off]
-  inputs:
-    world_index_vs_10m_ma: {series: world_index, ma_months: 10}
-    high_yield_spread: {source: FRED, series: BAMLH0A0HYM2}
-    vix_percentile: {series: VIX, lookback_years: 10}
-  max_grade_shift_steps: 1       # regime moves stock and crypto grades at most one step
-  applies_to_tabs: [stocks, crypto]
-  overrides_gates: false         # never
+  world_index: {index: msci-world, ma_months: 10}        # above its 10-month average: +1, below: -1
+  high_yield_spread: {series: BAMLH0A0HYM2, min_history_years: 1, calm_below_pct: 50, stress_above_pct: 80}
+  vix: {series: VIXCLS, lookback_years: 10, calm_below_pct: 50, stress_above_pct: 80}
+  risk_on_at: 2                  # sum of votes >= 2: risk on
+  risk_off_at: -2                # sum of votes <= -2: risk off
+  min_inputs: 2                  # fewer inputs available: no regime that day
+  scores: {risk_on: 100, neutral: 50, risk_off: 0}       # the metric regime_score (index and Bitcoin macro)
+  # Letter shift in notches (B -> B-) for templates with regime_adjust. Only a risk-off regime moves grades,
+  # one notch down; gates are applied after the shift and are never set aside.
+  grade_shift: {risk_on: 0, neutral: 0, risk_off: -1}
+  max_grade_shift_steps: 1
+
+# ETF product scores (chapter 6, ETF). Higher is better; percentiles are taken within the same index.
+etf:
+  tracking_years: [5, 3]         # tracking difference over 5 years, else 3; fewer years: ongoing charges
+  # An index fund that differs more than this per year from its index (or the median fund) points to a wrong
+  # price series or an index change: its tracking difference is not used and ongoing charges stand in.
+  max_plausible_tracking_difference: 0.015
+  replication_scores: {full: 1.0, sampling: 0.9, synthetic: 0.8}
+  lending_scores: {"no": 1.0, "yes": 0.9}
+  min_peers: 2                   # an index with two ETFs can still be compared
+
+# Bond ETFs (chapter 6, Obligatie). Expected annual loss from default per rating, in percent: long-run
+# average default rates (Moody's, 1920 onwards) times 60% loss given default. An own approximation, not a
+# published table; unrated holdings count as BBB.
+bond:
+  expected_loss_pct: {aaa: 0.0, aa: 0.02, a: 0.05, bbb: 0.15, bb: 0.6, b: 2.0, ccc_lower: 8.0, nr: 0.15}
+  rating_points: {aaa: 100, aa: 85, a: 70, bbb: 55, bb: 35, b: 20, ccc_lower: 5, nr: 55}
+  stale_days: 200                # portfolio figures (yield, duration, ratings) older than this are not used
 
 etf_tax:
   # Withholding tax on US dividends by fund domicile. NL treatment not verified (chapter 6).

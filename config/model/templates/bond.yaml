@@ -33,6 +33,8 @@ pillars:
     weight: 15
     metrics:
       - tracking_difference
+      # No free total-return series exists for bond indices: ongoing charges stand in.
+      - {id: ongoing_charges, fallback_for: tracking_difference}
       - bid_ask_spread
   - id: diversification
     name_nl: Spreiding

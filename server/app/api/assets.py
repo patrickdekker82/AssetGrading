@@ -13,10 +13,13 @@ from sqlalchemy.dialects.postgresql import insert
 from app.charting.indicators import (
     CRYPTO_INDICATORS,
     DEFAULT_ON,
+    INDEX_DEFAULT_ON,
+    INDEX_INDICATORS,
     STOCK_DEFAULT_ON,
     STOCK_INDICATORS,
     aggregate_ohlc,
     daily_indicators,
+    index_indicators,
     sample,
     sig,
     stock_indicators,
@@ -162,13 +165,20 @@ def _benchmark_for(session, asset: Asset) -> tuple[str | None, str | None]:
         us = session.execute(text("SELECT 1 FROM asset_alias WHERE asset_id = :a AND kind = 'us_ticker'"),
                              {"a": asset.id}).first()
         return ("sp500", "S&P 500") if us else ("aex", "AEX")
+    if asset.asset_class == "index" and asset.slug != "msci-world":
+        return "msci-world", "MSCI World"
+    if asset.asset_class == "etf":
+        group = next((c.split(":", 1)[1] for c in asset.categories or [] if str(c).startswith("index_group:")), None)
+        index = {"msci_world": "msci-world", "sp500": "sp500", "nasdaq100": "nasdaq-100", "aex": "aex",
+                 "eurostoxx50": "euro-stoxx-50"}.get(group or "")
+        return (index, "de index") if index else (None, None)
     return None, None
 
 
 def _build_chart(key: str, interval: str, jobs) -> dict:
     with jobs.sf() as session:
         asset = _asset(session, key)
-        stock = asset.asset_class in ("stock", "index")
+        stock = asset.asset_class in ("stock", "index", "etf", "bond", "reference")
         conn = session.connection()
         # Stocks are charted in their own currency (adjusted for splits and dividends), crypto in euro.
         cols = ("open_eur AS open, high_eur AS high, low_eur AS low, close_eur AS close" if not stock else
@@ -192,6 +202,16 @@ def _build_chart(key: str, interval: str, jobs) -> dict:
             "SELECT as_of, letter, status, result->'gates' AS gates FROM grade_snapshot "
             "WHERE asset_id = :a AND model_version_id = :v ORDER BY as_of"),
             {"a": asset.id, "v": jobs.model_version_id}).mappings().all()
+        regime_rows = session.execute(text(
+            "SELECT date, state FROM market_regime WHERE model_version_id = :v ORDER BY date"),
+            {"v": jobs.model_version_id}).all()
+        macro = {}
+        if asset.asset_class == "index":
+            for sid in ("VIXCLS", "VXVCLS"):
+                rows = session.execute(text(
+                    "SELECT DISTINCT ON (date) date, value FROM macro_observation WHERE series_id = :s "
+                    "ORDER BY date, available_at DESC"), {"s": sid}).all()
+                macro[sid] = pd.Series([float(r[1]) for r in rows], index=[r[0] for r in rows], dtype=float)
     if prices.empty:
         return {"candles": [], "volume": [], "indicators": {}, "catalog": [], "benchmark": None, "markers": [],
                 "gate_zones": []}
@@ -211,7 +231,13 @@ def _build_chart(key: str, interval: str, jobs) -> dict:
         df = df[df["source"] == best]
         return pd.Series(df["value"].to_numpy(dtype=float), index=list(df["as_of"]))
 
-    if stock:
+    if asset.asset_class in ("index", "etf", "bond", "reference"):
+        breadth = None
+        if asset.asset_class == "index":
+            breadth = _breadth_for(jobs, asset)
+        ind = index_indicators(ohlc, benchmark, macro.get("VIXCLS"), macro.get("VXVCLS"), breadth)
+        defs, default_on = INDEX_INDICATORS, INDEX_DEFAULT_ON
+    elif stock:
         ind, defs, default_on = stock_indicators(ohlc, benchmark), STOCK_INDICATORS, STOCK_DEFAULT_ON
     else:
         ind = daily_indicators(ohlc, benchmark, fact_series("funding_rate_daily"), fact_series("open_interest_usd"))
@@ -252,7 +278,35 @@ def _build_chart(key: str, interval: str, jobs) -> dict:
     return {"interval": interval, "candles": candle_rows, "volume": volume, "indicators": indicators,
             "catalog": catalog, "benchmark": bench_points, "benchmark_name": bench_name if bench_points else None,
             "markers": markers, "gate_zones": zones, "currency": currency, "adjusted": stock,
+            "regime_zones": _risk_off_zones(regime_rows, ohlc.index[0]),
             "tradingview_symbol": _tradingview_symbol(asset)}
+
+
+def _risk_off_zones(rows, first_day) -> list[dict]:
+    zones, current = [], None
+    for day, state in rows:
+        if day < first_day:
+            continue
+        if state == "risk_off":
+            if current is None:
+                current = {"start": day.isoformat(), "end": day.isoformat(), "state": state}
+                zones.append(current)
+            current["end"] = day.isoformat()
+        else:
+            current = None
+    return zones
+
+
+def _breadth_for(jobs, asset: Asset) -> pd.Series | None:
+    from app.grading.markets import breadth_series, load_market_data
+
+    universe = next((c.split(":", 1)[1] for c in asset.categories or [] if str(c).startswith("breadth:")), None)
+    if not universe:
+        return None
+    today = datetime.now(UTC).date()
+    with jobs.sf() as session:
+        data = load_market_data(session, today, datetime.now(UTC), jobs.model_version_id)
+    return breadth_series(data, universe, today)
 
 
 TRADINGVIEW_INDEX = {"sp500": "SP:SPX", "aex": "EURONEXT:AEX"}
@@ -449,3 +503,38 @@ def unwatch(key: str, request: Request) -> dict:
             session.delete(item)
             session.commit()
     return {"id": key, "in_watchlist": False}
+
+
+@router.get("/assets/{key}/peers")
+def etf_peers(key: str, request: Request) -> dict:
+    """ETFs on the same index side by side: tracking difference split into costs and the rest."""
+    jobs = _ctx(request)
+    with jobs.sf() as session:
+        asset = _asset(session, key)
+        group = next((c.split(":", 1)[1] for c in asset.categories or [] if str(c).startswith("index_group:")), None)
+        if asset.asset_class != "etf" or not group:
+            return {"group": None, "rows": []}
+        rows = session.execute(text(
+            """
+            SELECT DISTINCT ON (a.id) a.slug, a.name, a.categories, g.letter, g.status, g.score,
+                   g.inputs->'grade_input'->'metrics' AS metrics, g.inputs->'provenance' AS provenance, g.as_of
+            FROM asset a JOIN grade_snapshot g ON g.asset_id = a.id AND g.model_version_id = :v
+            WHERE a.asset_class = 'etf' AND a.categories @> CAST(:cat AS jsonb)
+            ORDER BY a.id, g.as_of DESC
+            """), {"v": jobs.model_version_id, "cat": f'["index_group:{group}"]'}).mappings().all()
+    out = []
+    for r in rows:
+        m = {k: (v or {}).get("value") for k, v in (r["metrics"] or {}).items()}
+        cats = dict(str(c).split(":", 1) for c in r["categories"] or [] if ":" in str(c))
+        td, ter = m.get("tracking_difference"), m.get("ongoing_charges")
+        out.append({
+            "id": r["slug"], "name": r["name"], "letter": r["letter"], "status": r["status"], "score": r["score"],
+            "tracking_difference": td, "ongoing_charges": ter,
+            "rest_after_costs": None if td is None or ter is None else td + ter,
+            "fund_size": m.get("fund_size"), "domicile": cats.get("domicile"), "replication": cats.get("replication"),
+            "distribution": cats.get("distribution"), "securities_lending": cats.get("securities_lending"),
+            "td_source": (r["provenance"] or {}).get("tracking_difference"), "as_of": r["as_of"],
+        })
+    out.sort(key=lambda x: -(x["score"] or 0))
+    group_name = jobs.markets.index_groups[group].name if jobs.markets and group in jobs.markets.index_groups else group
+    return {"group": group_name, "rows": out}

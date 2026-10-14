@@ -48,6 +48,7 @@ class FxSettings(_Strict):
 class MacroSettings(_Strict):
     history_start: str
     fred_series: dict[str, str]
+    ecb_series: dict[str, dict[str, str]] = {}   # stored id -> {key, label}
 
 
 class ProvidersConfig(_Strict):

@@ -9,7 +9,7 @@ import operator
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-from app.grading.letters import RANK, apply_hysteresis, cap, letter_for
+from app.grading.letters import RANK, apply_hysteresis, cap, letter_for, shift
 from app.modelconfig import ModelConfig
 from app.modelconfig.schema import (
     FlagGate,
@@ -38,13 +38,14 @@ class GradeInput:
     flags: dict[str, bool | None] = field(default_factory=dict)
     prev_letter: str | None = None          # last published letter before caps (hysteresis state)
     recent_raw: list[str] = field(default_factory=list)  # raw letters of previous days, oldest first
+    regime: str | None = None               # market regime of the day (risk_on | neutral | risk_off)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "GradeInput":
         metrics = {k: MetricInput(**v) for k, v in data["metrics"].items()}
         return cls(template_id=data["template_id"], tags=list(data["tags"]), metrics=metrics,
                    flags=dict(data.get("flags", {})), prev_letter=data.get("prev_letter"),
-                   recent_raw=list(data.get("recent_raw", [])))
+                   recent_raw=list(data.get("recent_raw", [])), regime=data.get("regime"))
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -276,7 +277,11 @@ def _weighted(inp: GradeInput, template: Template, config: ModelConfig) -> Grade
     raw = letter_for(score, scale)
     held = apply_hysteresis(score, raw, inp.prev_letter, inp.recent_raw, scale, stab.hysteresis_points,
                             stab.hysteresis_days)
-    letter, labels = _apply_gates(held, gates, template)
+    notches = _regime_notches(inp, template, config)
+    if notches:
+        notes.append(f"Marktregime {REGIME_NL.get(inp.regime or '', inp.regime)}: grade {notches:+d} stap, "
+                     "vóór de gates.")
+    letter, labels = _apply_gates(shift(held, notches), gates, template)
 
     # Bandwidth: every pillar weight 20% higher and lower, one at a time.
     variants = [score]
@@ -286,8 +291,8 @@ def _weighted(inp: GradeInput, template: Template, config: ModelConfig) -> Grade
         for factor in (1 + stab.band_weight_shift, 1 - stab.band_weight_shift):
             variants.append(_combine(pillars, {p.id: factor}))
     low, high = min(variants), max(variants)
-    letter_low, _ = _apply_gates(letter_for(low, scale), gates, template)
-    letter_high, _ = _apply_gates(letter_for(high, scale), gates, template)
+    letter_low, _ = _apply_gates(shift(letter_for(low, scale), notches), gates, template)
+    letter_high, _ = _apply_gates(shift(letter_for(high, scale), notches), gates, template)
 
     reason = None
     if status == "no_grade":
@@ -299,6 +304,18 @@ def _weighted(inp: GradeInput, template: Template, config: ModelConfig) -> Grade
         labels.append(template.label_nl)
     return GradeResult(template.id, status, score, quality, timing, coverage, raw, held, letter, letter_low,
                        letter_high, low, high, None, labels, reason, pillars, gates, notes)
+
+
+REGIME_NL = {"risk_on": "risico aan", "neutral": "neutraal", "risk_off": "risico uit"}
+
+
+def _regime_notches(inp: GradeInput, template: Template, config: ModelConfig) -> int:
+    """Grade shift from the market regime for templates with regime_adjust (at most max_grade_shift_steps)."""
+    regime = config.settings.regime
+    if not template.regime_adjust or inp.regime is None or isinstance(regime, dict):
+        return 0
+    limit = regime.max_grade_shift_steps
+    return max(-limit, min(limit, regime.grade_shift.get(inp.regime, 0)))
 
 
 def _no_grade_reason(coverage: float, pillars: list[PillarResult], config: ModelConfig) -> str:

@@ -296,22 +296,36 @@ def _stored_closes(session: Session, asset_id: int, source: str, since: date) ->
 
 
 def _update_source(ctx: StockContext, asset_id: int, source: str, symbol: str) -> None:
-    provider = ctx.providers.get(source)
-    with ctx.sf() as session:
+    update_adjusted_series(ctx.sf, ctx.providers.get(source), asset_id, source, symbol, ctx.price_start,
+                           ctx.today, ctx.stocks.prices.recheck_days, ctx.report)
+
+
+def update_adjusted_series(sf: sessionmaker[Session], provider, asset_id: int, source: str, symbol: str,
+                           history_start: date, today: date, recheck_days: int, report: Report, *,
+                           store_raw: bool = True, **series_kw) -> None:
+    """Adjusted daily bars (and the closes as traded): new days, plus a full re-read when an adjusted close
+    of the last `recheck_days` changed (a dividend or split since the last run)."""
+    with sf() as session:
         last = session.scalar(select(func.max(PriceBar.ts)).where(
             PriceBar.asset_id == asset_id, PriceBar.source == source, PriceBar.interval == "1d"))
-    end = ctx.today
     if last is None:
-        series = provider.series(symbol, ctx.price_start, end)
+        series = provider.series(symbol, history_start, today, **series_kw)
     else:
-        since = last - timedelta(days=ctx.stocks.prices.recheck_days)
-        series = provider.series(symbol, since, end)
-        with ctx.sf() as session:
+        since = last - timedelta(days=recheck_days)
+        series = provider.series(symbol, since, today, **series_kw)
+        with sf() as session:
             stored = _stored_closes(session, asset_id, source, since)
         if _adjustment_changed(stored, series):
-            ctx.report.add("price_history_readjusted")
-            series = provider.series(symbol, ctx.price_start, end)
-    _store_series(ctx, asset_id, source, series)
+            report.add("price_history_readjusted")
+            series = provider.series(symbol, history_start, today, **series_kw)
+    fetched_at = datetime.now(UTC)
+    with sf() as session:
+        report.add("bars_written", upsert_bars(session, asset_id, source, series.bars, fetched_at))
+        if store_raw:
+            facts = [Fact(field="close_raw", as_of=d, value=v, unit=series.currency, call_id=series.call_id)
+                     for d, v in series.raw_closes]
+            report.add("facts_added", insert_facts(session, asset_id, source, facts, fetched_at))
+        session.commit()
 
 
 def _adjustment_changed(stored: dict[date, Decimal], series: PriceSeries) -> bool:
@@ -320,16 +334,6 @@ def _adjustment_changed(stored: dict[date, Decimal], series: PriceSeries) -> boo
         if old is not None and old != 0 and abs(b.close / old - 1) > RECHECK_TOLERANCE:
             return True
     return False
-
-
-def _store_series(ctx: StockContext, asset_id: int, source: str, series: PriceSeries) -> None:
-    fetched_at = datetime.now(UTC)
-    with ctx.sf() as session:
-        ctx.report.add("bars_written", upsert_bars(session, asset_id, source, series.bars, fetched_at))
-        facts = [Fact(field="close_raw", as_of=d, value=v, unit=series.currency, call_id=series.call_id)
-                 for d, v in series.raw_closes]
-        ctx.report.add("facts_added", insert_facts(session, asset_id, source, facts, fetched_at))
-        session.commit()
 
 
 # --- fundamentals -------------------------------------------------------------------------------

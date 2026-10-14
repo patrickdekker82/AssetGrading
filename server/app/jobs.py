@@ -13,12 +13,16 @@ from sqlalchemy import Engine, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.grading.crypto import grade_crypto
+from app.grading.markets import grade_markets
+from app.grading.regime import update_regime
 from app.grading.stocks import grade_stocks
 from app.ingest.crypto import run_crypto
 from app.ingest.fx_macro import run_fx_macro
+from app.ingest.markets import run_markets
 from app.ingest.prune import run_prune
 from app.ingest.report import Report
 from app.ingest.stocks import run_stocks
+from app.markets_config import MarketsConfig
 from app.modelconfig import ModelConfig
 from app.models import JobRun
 from app.providers.config import ProvidersConfig
@@ -40,6 +44,7 @@ class JobContext:
     model: ModelConfig | None = None
     model_version_id: int | None = None
     stocks: StocksConfig | None = None
+    markets: MarketsConfig | None = None
 
 
 def run_crypto_and_grade(c: JobContext) -> Report:
@@ -87,6 +92,33 @@ def run_stocks_and_grade(c: JobContext) -> Report:
     return report
 
 
+REGIME_START = date(2010, 1, 1)
+
+
+def run_markets_and_grade(c: JobContext) -> Report:
+    """Weekday markets run: indices, ETFs and bond ETFs, the market regime, then their grades."""
+    if c.model is None or c.model_version_id is None or c.markets is None:
+        report = Report()
+        report.error("Geen model- of marktconfiguratie geladen.")
+        return report
+    report = run_markets(c.sf, c.providers, c.cfg, c.markets)
+    as_of = last_trading_day(datetime.now(UTC))
+    try:
+        update_regime(c.sf, c.model, c.model_version_id, datetime.now(UTC).date(), REGIME_START, report)
+        graded = grade_markets(c.sf, c.model, c.model_version_id, c.markets, as_of)
+    except Exception as exc:  # noqa: BLE001 - keep the ingest result; report the grading failure
+        log.exception("markets grading failed")
+        report.error(f"grading: {type(exc).__name__}: {exc}")
+        return report
+    for key, value in graded.counts.items():
+        report.add(key, value)
+    from app.api.assets import clear_chart_cache
+
+    clear_chart_cache()
+    report.errors += graded.errors
+    return report
+
+
 def last_trading_day(now: datetime) -> date:
     """The last weekday whose US session has closed (21:00 UTC covers both summer and winter time)."""
     day = now.date() if now.hour >= 21 else now.date() - timedelta(days=1)
@@ -98,6 +130,7 @@ def last_trading_day(now: datetime) -> date:
 JOBS: dict[str, Callable[[JobContext], Report]] = {
     "crypto": run_crypto_and_grade,
     "stocks": run_stocks_and_grade,
+    "markets": run_markets_and_grade,
     "fx_macro": lambda c: run_fx_macro(c.sf, c.providers, c.cfg),
     "prune_raw": lambda c: run_prune(c.sf, c.cfg),
 }
@@ -105,6 +138,7 @@ JOBS: dict[str, Callable[[JobContext], Report]] = {
 JOB_LABELS_NL = {
     "crypto": "Crypto (koersen, lijst, fundamentals)",
     "stocks": "Aandelen (koersen, SEC-cijfers, lijst)",
+    "markets": "Indices, ETF's, obligaties en marktregime",
     "fx_macro": "Wisselkoersen en macro",
     "prune_raw": "Opruimen ruwe antwoorden",
 }
@@ -183,7 +217,8 @@ def _execute(ctx: JobContext, name: str, trigger: str) -> JobRun:
 
 
 def schedule_jobs(scheduler: BaseScheduler, ctx: JobContext) -> None:
-    mapping = {"crypto": ["crypto"], "stocks": ["stocks"], "fx_macro": ["fx_macro"], "prune_raw": ["prune_raw"]}
+    mapping = {"crypto": ["crypto"], "stocks": ["stocks"], "markets": ["markets"], "fx_macro": ["fx_macro"],
+               "prune_raw": ["prune_raw"]}
     for key, expr in ctx.cfg.schedule.items():
         for job in mapping.get(key, []):
             scheduler.add_job(

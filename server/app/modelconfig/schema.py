@@ -243,6 +243,41 @@ class StabilitySettings(Strict):
     band_weight_shift: float = Field(ge=0, lt=1)
 
 
+class RegimeVote(Strict):
+    series: str
+    calm_below_pct: float
+    stress_above_pct: float
+    lookback_years: float | None = None
+    min_history_years: float | None = None
+
+
+class RegimeSettings(Strict):
+    states: list[str]
+    world_index: dict[str, Any]
+    high_yield_spread: RegimeVote
+    vix: RegimeVote
+    risk_on_at: int
+    risk_off_at: int
+    min_inputs: int
+    scores: dict[str, float]
+    grade_shift: dict[str, int]
+    max_grade_shift_steps: int
+
+
+class EtfSettings(Strict):
+    tracking_years: list[int]
+    max_plausible_tracking_difference: float
+    replication_scores: dict[str, float]
+    lending_scores: dict[str, float]
+    min_peers: int
+
+
+class BondSettings(Strict):
+    expected_loss_pct: dict[str, float]
+    rating_points: dict[str, float]
+    stale_days: int
+
+
 class ModelSettings(Strict):
     version: str
     description: str | None = None
@@ -253,7 +288,9 @@ class ModelSettings(Strict):
     coverage: CoverageSettings
     peers: PeerSettings
     stability: StabilitySettings
-    regime: dict[str, Any]
+    regime: RegimeSettings | dict[str, Any]     # a plain dict in model versions before 0.4.0
+    etf: EtfSettings | None = None
+    bond: BondSettings | None = None
     etf_tax: dict[str, Any]
     forbidden_words_nl: list[str]
 

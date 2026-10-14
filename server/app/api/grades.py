@@ -21,10 +21,13 @@ def _pillar_note(pillars: list[dict], best: bool) -> str | None:
 TAB_SOURCES = {
     "crypto": ("crypto", ["crypto_top"]),
     "stocks": ("stock", ["stocks_us", "stocks_aex"]),
+    "etfs": ("etf", []),          # static lists: every followed asset is in the list
+    "bonds": ("bond", []),
+    "indices": ("index", []),
 }
 # The list is recorded on the day of the run: the crypto run just after midnight grades the day before,
 # a stock run can grade Friday's close on Monday.
-LIST_LAG_DAYS = {"crypto": 1, "stocks": 4, "watchlist": 4}
+LIST_LAG_DAYS = {"crypto": 1, "stocks": 4, "watchlist": 4, "etfs": 4, "bonds": 4, "indices": 4}
 LIST_LABELS = {"crypto_top": "top", "stocks_us": "VS", "stocks_aex": "AEX"}
 
 
@@ -96,7 +99,9 @@ def grades(request: Request, tab: str = "crypto") -> dict:
             "quality": r["quality"], "timing": r["timing"], "coverage": r["coverage"], "peg_safety": r["peg_safety"],
             "price_eur": r["price_eur"], "labels": res.get("labels", []), "reason": res.get("reason_nl"),
             "plus": _pillar_note(res.get("pillars", []), True), "minus": _pillar_note(res.get("pillars", []), False),
-            "letter_month_ago": r["letter_month_ago"], "in_list": bool(r["included"]), "exclusion": r["exclusion"],
+            "letter_month_ago": r["letter_month_ago"],
+            "in_list": bool(r["included"]) or (tab in TAB_SOURCES and not TAB_SOURCES[tab][1]),
+            "exclusion": r["exclusion"],
             "mcap_rank": r["mcap_rank"], "btc_relative": (res.get("btc_relative") or {}).get("letter"),
             "spark": r["spark"] or [], "watched": bool(r["watched"]), "asset_class": r["asset_class"],
             "market_cap_eur": float(r["market_cap_eur"]) if r["market_cap_eur"] is not None else None,
@@ -108,3 +113,41 @@ def grades(request: Request, tab: str = "crypto") -> dict:
     for i, row in enumerate(out, 1):
         row["rank"] = i
     return {"tab": tab, "as_of": as_of, "rows": out, "model_version": config.version}
+
+
+@router.get("/regime")
+def regime(request: Request, days: int = 400) -> dict:
+    """The market regime of the latest day with its three inputs, and the weekly history."""
+    jobs = request.app.state.jobs
+    with jobs.sf() as session:
+        rows = session.execute(text(
+            """
+            SELECT date, state, score, week_end, inputs FROM market_regime
+            WHERE model_version_id = :v ORDER BY date DESC LIMIT :n
+            """), {"v": jobs.model_version_id, "n": days}).mappings().all()
+    if not rows:
+        return {"latest": None, "history": []}
+    weekly = {}
+    for r in reversed(rows):
+        weekly[r["week_end"]] = {"week_end": r["week_end"], "state": r["state"], "score": r["score"]}
+    return {"latest": dict(rows[0]), "history": list(weekly.values())}
+
+
+@router.get("/rates")
+def rates(request: Request) -> list[dict]:
+    """Government yields for comparison on the bonds tab (latest value and a year ago)."""
+    jobs = request.app.state.jobs
+    out = []
+    with jobs.sf() as session:
+        for r in jobs.markets.rates if jobs.markets else []:
+            rows = session.execute(text(
+                """
+                SELECT DISTINCT ON (date) date, value FROM macro_observation WHERE series_id = :s
+                ORDER BY date DESC, available_at DESC LIMIT 400
+                """), {"s": r.series}).all()
+            if not rows:
+                continue
+            year_ago = next((v for d, v in rows if (rows[0][0] - d).days >= 365), None)
+            out.append({"series": r.series, "name": r.name, "date": rows[0][0], "value": float(rows[0][1]),
+                        "year_ago": float(year_ago) if year_ago is not None else None})
+    return out

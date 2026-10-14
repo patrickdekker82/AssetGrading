@@ -230,3 +230,17 @@ class WatchlistItem(Base):
 
     asset_id: Mapped[int] = mapped_column(ForeignKey("asset.id"), primary_key=True)
     added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class MarketRegime(Base):
+    """Daily market regime (chapter 5) with the three inputs it was decided on. Append-only."""
+
+    __tablename__ = "market_regime"
+
+    date: Mapped[date] = mapped_column(Date, primary_key=True)
+    model_version_id: Mapped[int] = mapped_column(ForeignKey("model_version.id"), primary_key=True)
+    state: Mapped[str | None] = mapped_column(String(12))
+    score: Mapped[int | None] = mapped_column(Integer)
+    week_end: Mapped[date] = mapped_column(Date)
+    inputs: Mapped[dict] = mapped_column(JSONB)
+    computed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

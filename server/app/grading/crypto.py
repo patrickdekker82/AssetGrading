@@ -60,14 +60,22 @@ def peer_group(config: ModelConfig, template_id: str, counts: dict[str, int]) ->
     return template_id, [template_id]
 
 
+def min_peers(config: ModelConfig, template_id: str) -> int:
+    """ETFs on the same index are compared even when there are only two of them."""
+    if config.templates[template_id].peer_group == "same_index" and config.settings.etf:
+        return config.settings.etf.min_peers
+    return MIN_PEERS
+
+
 def peer_members(p: "Prepared", prepared: list["Prepared"], config: ModelConfig,
                  counts: dict[str, int]) -> tuple[str, list["Prepared"]]:
     """Members of the comparison group of `p`. Stocks compare within their sector (same template); a sector
     with fewer than `min_group_size` members falls back to all stocks with that template."""
-    if config.templates[p.template_id].peer_group == "sector" and p.peer_key:
+    kind = config.templates[p.template_id].peer_group
+    if kind in ("sector", "bond_category", "same_index") and p.peer_key:
         sector = [q for q in prepared if q.template_id == p.template_id and q.peer_key == p.peer_key]
-        if len(sector) >= config.settings.peers.min_group_size:
-            return f"{p.template_id}:{p.peer_key}", sector
+        if kind == "same_index" or len(sector) >= config.settings.peers.min_group_size:
+            return f"{p.template_id}:{p.peer_key}", sector    # ETFs: only ever the same index
         return p.template_id, [q for q in prepared if q.template_id == p.template_id]
     group_name, group_templates = peer_group(config, p.template_id, counts)
     return group_name, [q for q in prepared if q.template_id in group_templates]
@@ -160,7 +168,7 @@ def build_inputs(prepared: list[Prepared], config: ModelConfig, as_of: date) -> 
                     peers_used[metric_id] = {"group": "own_history", "half_life_years": half_life}
                     continue
                 values = [q.metrics.values[metric_id] for q in members if q.metrics.values.get(metric_id) is not None]
-                if len(values) >= MIN_PEERS:
+                if len(values) >= min_peers(config, p.template_id):
                     mi.peer_pct = percentile_of(mi.value, values, higher_is_better=higher, winsor=winsor)
                 peers_used[metric_id] = {"group": group_name, "values": values}
                 hist = p.metrics.history.get(metric_id)
@@ -200,6 +208,11 @@ def grade_crypto(sf: sessionmaker[Session], config: ModelConfig, model_version_i
 def write_snapshots(sf: sessionmaker[Session], prepared: list[Prepared], config: ModelConfig, model_version_id: int,
                     as_of: date, knowledge: datetime, report: Report) -> None:
     """Grade every prepared asset and store the snapshots (an existing snapshot for the day is kept)."""
+    from app.grading.regime import regime_on
+
+    with sf() as session:
+        regime = regime_on(session, as_of, model_version_id)
+    apply_regime_metric(prepared, config, regime)
     inputs = build_inputs(prepared, config, as_of)
     days = config.settings.stability.hysteresis_days
     rows = []
@@ -207,6 +220,7 @@ def write_snapshots(sf: sessionmaker[Session], prepared: list[Prepared], config:
         for p in prepared:
             inp, peers = inputs[p.asset_id]
             inp.prev_letter, inp.recent_raw = _previous_state(session, p.asset_id, model_version_id, as_of, days)
+            inp.regime = regime
             result = grade(inp, config)
             report.add(f"status_{result.status}")
             rows.append(snapshot_row(p, inp, peers, result, model_version_id, as_of, knowledge))
@@ -216,6 +230,17 @@ def write_snapshots(sf: sessionmaker[Session], prepared: list[Prepared], config:
             added = session.execute(stmt.returning(GradeSnapshot.id)).all()
             report.add("snapshots_added", len(added))
         session.commit()
+
+
+def apply_regime_metric(prepared: list[Prepared], config: ModelConfig, regime: str | None) -> None:
+    """The metric regime_score (index and Bitcoin macro pillars) from the day's market regime."""
+    cfg = config.settings.regime
+    if regime is None or isinstance(cfg, dict) or regime not in cfg.scores:
+        return
+    for p in prepared:
+        ids = {m.id for pl in config.templates[p.template_id].pillars for m in pl.metrics}
+        if "regime_score" in ids:
+            p.metrics.set("regime_score", cfg.scores[regime], f"marktregime: {regime}")
 
 
 def snapshot_row(p: Prepared, inp: GradeInput, peers: dict, result: GradeResult, model_version_id: int,

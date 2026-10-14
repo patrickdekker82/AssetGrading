@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { lookup } from "./glossary";
-import { isTabSlug, RANKING_COLUMNS, TABS } from "./tabs";
+import { isTabSlug, RANKING_COLUMNS, TABS, tabForClass } from "./tabs";
 
 const configDir = path.resolve(import.meta.dirname, "../../../config");
 
@@ -39,5 +39,15 @@ describe("glossary lookup", () => {
   it("falls back to metrics and returns undefined when unknown", () => {
     expect(lookup(glossary, "beta")?.label).toBe("Bèta");
     expect(lookup(glossary, "nope")).toBeUndefined();
+  });
+});
+
+describe("tabForClass", () => {
+  it("maps every asset class to the tab its pages live on", () => {
+    expect(tabForClass("stock")).toBe("stocks");
+    expect(tabForClass("etf")).toBe("etfs");
+    expect(tabForClass("bond")).toBe("bonds");
+    expect(tabForClass("index")).toBe("indices");
+    expect(tabForClass("crypto")).toBe("crypto");
   });
 });

@@ -9,6 +9,13 @@ import { type GradeRow, GradeBadge } from "./GradeBadge";
 import { Sparkline } from "./Sparkline";
 import { Term } from "./Term";
 
+// What the "sector" field means per tab.
+const GROUP_LABEL: Record<string, [string, string]> = {
+  etfs: ["Filter index", "Alle indices"],
+  bonds: ["Filter categorie", "Alle categorieën"],
+  indices: ["Filter regio", "Alle regio's"],
+};
+
 const euro = new Intl.NumberFormat("nl-NL", { style: "currency", currency: "EUR", maximumSignificantDigits: 6 });
 const NUMERIC_FILTERS = new Set(["score", "quality", "timing", "coverage", "price"]);
 const TEXT_FILTERS = new Set(["name", "ticker", "plus", "minus"]);
@@ -59,9 +66,9 @@ export function RankingTable({ tab, views }: { tab: string; views: View[] }) {
           </div>
         )}
         {sectors.length > 1 && (
-          <select className="filter" aria-label="Filter sector" value={filters.sector}
+          <select className="filter" aria-label={GROUP_LABEL[tab]?.[0] ?? "Filter sector"} value={filters.sector}
             onChange={(e) => setFilters((f) => ({ ...f, sector: e.target.value }))}>
-            <option value="">Alle sectoren</option>
+            <option value="">{GROUP_LABEL[tab]?.[1] ?? "Alle sectoren"}</option>
             {sectors.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
         )}

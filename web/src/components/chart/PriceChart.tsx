@@ -33,6 +33,7 @@ export type ChartData = {
   benchmark_name: string | null;
   markers: { time: string; text: string }[];
   gate_zones: { start: string; end: string; labels: string[] }[];
+  regime_zones?: { start: string; end: string; state: string }[];
   tradingview_symbol: string;
   currency?: string;
   adjusted?: boolean;
@@ -156,6 +157,17 @@ export function PriceChart({ assetId }: { assetId: string }) {
       }, 0);
       zones.priceScale().applyOptions({ scaleMargins: { top: 0, bottom: 0 } });
       zones.setData(data.candles.filter((c) => data.gate_zones.some((z) => c.time >= z.start && c.time <= z.end))
+        .map((c) => ({ time: c.time as Time, value: 1 })));
+    }
+
+    // Market regime: risk-off weeks shaded in blue-grey behind the candles.
+    const riskOff = data.regime_zones ?? [];
+    if (riskOff.length) {
+      const regime = chart.addSeries(HistogramSeries, {
+        priceScaleId: "regime", color: "rgba(84, 110, 122, 0.13)", priceLineVisible: false, lastValueVisible: false,
+      }, 0);
+      regime.priceScale().applyOptions({ scaleMargins: { top: 0, bottom: 0 } });
+      regime.setData(data.candles.filter((c) => riskOff.some((z) => c.time >= z.start && c.time <= z.end))
         .map((c) => ({ time: c.time as Time, value: 1 })));
     }
 
@@ -321,6 +333,9 @@ export function PriceChart({ assetId }: { assetId: string }) {
           <div ref={container} className="chart" aria-label="Koersgrafiek" />
           {data && data.gate_zones.length > 0 && (
             <p className="muted small">Rood gearceerd: dagen waarop een <Term id="gate">gate</Term> de grade begrensde.</p>
+          )}
+          {data && (data.regime_zones?.length ?? 0) > 0 && (
+            <p className="muted small">Blauwgrijs gearceerd: weken met <Term id="marktregime">marktregime</Term> risico uit.</p>
           )}
         </>
       )}

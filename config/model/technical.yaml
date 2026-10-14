@@ -56,6 +56,22 @@ params:
     benchmark: market_index      # S&P 500 for US stocks, AEX for Dutch stocks
     days_per_year: 252
 
+  indices:                       # indices and ETFs: own currency, compared with the world index
+    sma_short: 50
+    sma_long: 200
+    sma_long_rising_lag: 20
+    months_for_10m_average: 10
+    momentum_long: 365
+    momentum_skip: 30
+    momentum_short: 182
+    high_window: 364
+    relative_windows: [91, 182, 365]
+    volatility_window: 91
+    volatility_history: 1095
+    min_block_coverage: 0.5
+    benchmark: msci-world
+    days_per_year: 252
+
 rules:
   completed_periods_only: true
   crypto:

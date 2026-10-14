@@ -66,6 +66,9 @@ Alles wat het model bepaalt staat in versiebeheerde YAML-bestanden, niet in code
 | `config/model/technical.yaml` | De technische score en de standaardindicatoren per klasse |
 | `config/universes.yaml` | Tabs en lijstgrootte (top 25, 50 of 100) |
 | `config/stocks.yaml` | Aandelen: hoe de VS-lijst wordt bepaald, de AEX-fondsen (met ISIN) en de koersbronnen |
+| `config/indices.yaml` | De indices, met valuta, rentecurve en (waar gevolgd) de aandelen voor marktbreedte |
+| `config/etfs.yaml` | ETF-groepen per index, obligatiecategorieën en de staatsrentes ter vergelijking |
+| `config/etfs.csv`, `config/bond_etfs.csv` | Zelf bijgehouden fondskenmerken (kosten, domicilie, replicatie, omvang; bij obligaties rendement, duration en ratings), met bron en datum per regel |
 | `config/providers.yaml` | Databronnen: adressen, snelheidslimieten, maandbudgetten, planning van de nachtelijke runs |
 | `config/glossary.nl.yaml` | De woordenlijst: elke tooltip in de interface komt hiervandaan |
 | `.env` | Wachtwoorden en API-sleutels (nooit in git) |
@@ -92,6 +95,7 @@ De rekenserver haalt elke nacht zelf data op (tijden in UTC, instelbaar in `conf
 | Taak | Wanneer | Wat |
 | --- | --- | --- |
 | Crypto | 00:05 | Top 50 van CoinGecko, dagkoersen (Coinbase → Binance → CoinGecko), marktwaarde, TVL en fees (DefiLlama), on-chain data (Coin Metrics) |
+| Markten | werkdagen 21:45 | Indices, ETF's en obligatie-ETF's (Yahoo), tien grootste posities (maandelijks), rentes (FRED, ECB), daarna het marktregime en de grades |
 | Aandelen | werkdagen 22:30 | Grootste SEC-registranten met een 10-K en de AEX-fondsen, dagkoersen (Tiingo → Yahoo; EODHD als je die afneemt), SEC-cijfers na elke nieuwe publicatie en minstens maandelijks, daarna de grades |
 | Wisselkoersen en macro | werkdagen 16:30 | ECB-referentiekoersen (Frankfurter) en rentes, VIX en dollarindex (FRED) |
 | Opruimen | 03:30 | Ruwe antwoorden ouder dan de bewaartermijn per bron |
@@ -137,6 +141,21 @@ jaarcijfers en krijgen daarom geen grade, alleen koersen en een technische score
   geen aantal aandelen geeft (Visa, Berkshire Hathaway) kan dat met `set-fact v shares_outstanding <aantal>`.
   Zo'n waarde telt mee vanaf het moment van invullen, nooit met terugwerkende kracht.
 
+### Marktregime
+
+Elke week bepaalt de rekenserver het marktregime (risico aan, neutraal of risico uit) uit drie invoeren:
+de wereldindex tegenover zijn 10-maandsgemiddelde, de renteopslag op high-yield-obligaties en de VIX. Het
+regime staat per dag in de tabel `market_regime`, met de drie invoeren erbij. Bij risico uit gaat de grade
+van aandelen en crypto één stapje omlaag (B wordt B-); gates blijven altijd gelden. De drempels staan in
+`config/model/model.yaml` onder `regime`. Op de tab Indices staat de huidige stand met de invoeren.
+
+### ETF-kenmerken bijwerken
+
+Er is geen gratis bron met betrouwbare fondskenmerken. Werk daarom `config/etfs.csv` en
+`config/bond_etfs.csv` zelf bij (bijvoorbeeld elk kwartaal, met de factsheet van de uitgever) en vul bron
+en datum in. Een nieuwe waarde telt mee vanaf het moment dat de nachtrun hem inleest. Obligatiecijfers
+(rendement, duration, ratings) ouder dan 200 dagen tellen niet meer mee.
+
 ## Back-up
 
 ```bash
@@ -165,8 +184,8 @@ De app wordt in elf fases gebouwd (zie `CHANGELOG.md`). Na elke fase volgt een a
 | 1 | Datalaag (crypto, wisselkoersen, macro) | Klaar |
 | 2 | Grading-engine en crypto | Klaar |
 | 3 | Interface en grafiek | Klaar |
-| 4 | Aandelen | Klaar, wacht op akkoord |
-| 5 | ETF's, obligaties, indices en marktregime | |
+| 4 | Aandelen | Klaar |
+| 5 | ETF's, obligaties, indices en marktregime | Klaar, wacht op akkoord |
 | 6 | Grondstoffen en valuta | |
 | 7 | Toelichting, volglijst en bronnen | |
 | 8 | Uitkomsten, terugtest en pagina Model | |

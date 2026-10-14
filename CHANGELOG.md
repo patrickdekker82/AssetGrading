@@ -1,5 +1,109 @@
 # Changelog
 
+## Fase 5 – ETF's, obligaties, indices en marktregime (2026-10-14)
+
+### Gebouwd
+
+- **Indices** (`config/indices.yaml`): 17 wereldwijde indices.
+  - Koersen van Yahoo in de eigen valuta.
+  - De euro-omrekening werkt nu voor elke valuta die de ECB publiceert (migratie `0007`; INR toegevoegd).
+  - Sjabloon Index, vergeleken met de eigen historie:
+    - trend: de technische score, met MSCI World als vergelijking;
+    - macro: het marktregime en de rentecurve (VS via FRED, eurozone via de ECB);
+    - marktbreedte: deel van de aandelen boven het 200-daags gemiddelde, alleen waar de app de leden
+      volgt (S&P 500 met de gevolgde VS-aandelen, AEX);
+    - volatiliteit tegenover de eigen historie.
+- **Marktregime** (tabel `market_regime`, alleen toevoegen): per dag de stand en de drie invoeren.
+  - De drie invoeren: MSCI World tegen zijn 10-maandsgemiddelde, de renteopslag op high-yield-obligaties
+    (FRED) en de VIX, de laatste twee tegenover hun eigen historie.
+  - Elke invoer stemt +1, 0 of −1, op de afgesloten week. Een som van 2 of hoger is risico aan, −2 of lager
+    risico uit.
+  - Opgeslagen van 2010 tot vandaag: 6.131 dagen.
+  - Koppeling met de andere sjablonen:
+    - bij risico uit gaat de grade van aandelen en crypto (sjablonen met `regime_adjust`) één stapje omlaag,
+      vóór de gates, zodat een gate altijd wint;
+    - de maatstaf `regime_score` (Index en Bitcoin) volgt het regime;
+    - het regime staat in de invoer van elke grade, zodat herberekenen exact blijft.
+  - Instelbaar in `model.yaml` onder `regime`.
+- **ETF's**: 37 UCITS-ETF's op 9 indices.
+  - De kenmerken staan in het zelf bijgehouden bestand `config/etfs.csv`: kosten, domicilie, replicatie,
+    uitlenen, uitkeringsbeleid, start, fondsomvang en aantal aandelen in de index. Elke waarde is op
+    14 oktober gecontroleerd op de pagina van de uitgever (anders justETF), met bron en datum per regel.
+  - Tracking difference over 5 jaar (anders 3), in euro:
+    - tegen de totaalrendementsreeks van de index waar die gratis is (S&P 500);
+    - anders tegen de middelste ETF op dezelfde index.
+  - Vergeleken worden alleen ETF's op dezelfde index. De ETF-pagina zet ze naast elkaar en splitst het
+    verschil in kosten en de rest (belasting op dividend, uitlenen, replicatie).
+  - De Timing van de onderliggende index staat er los bij.
+  - De tien grootste posities komen maandelijks van Yahoo.
+- **Obligatie-ETF's**: 15 fondsen in `config/bond_etfs.csv`, met rendement, duration, ratingverdeling en
+  concentratie (iShares: 9 en 12 oktober; Vanguard: 31 augustus).
+  - Verwacht nettorendement = rendement min verwacht verlies door wanbetaling (per rating, in `model.yaml`)
+    min kosten.
+  - Daarnaast: reële rente bij VS-staatsobligaties, opslag per eenheid wanbetalingsrisico en rendement per
+    jaar duration.
+  - Staatsrentes (VS en eurozone) staan ter vergelijking op de tab, zonder grade.
+- **Interface**:
+  - tab Indices met de stand van het regime, de drie invoeren en een balk per week;
+  - tabs ETF's en Obligaties met filters op index en categorie;
+  - kenmerken op de fondspagina;
+  - grafiek met de indicatorset voor indices: 200 dagen, 10 maanden, daling vanaf de top, VIX, VIX tegen
+    VIX over 3 maanden en marktbreedte;
+  - weken met risico uit blauwgrijs gearceerd in elke grafiek.
+- **Taak `markets`** (werkdagen 21:45 UTC), vóór de aandelenrun, zodat die het regime van de dag gebruikt.
+- Nieuwe bronnen: ECB Data Portal (rentecurve) en Yahoo-fondsdata (posities).
+- `python -m app.cli regime` vult ontbrekende dagen.
+- **Modelversie 0.4.0**: regime-instellingen, ETF- en obligatie-instellingen, `params.indices`, en bij het
+  sjabloon Obligatie lopende kosten als terugval voor tracking difference.
+
+### Acceptatie (live gemeten op 14 oktober 2026, peildatum 13 oktober)
+
+- **ETF's op dezelfde index staan naast elkaar, met een verklaarbaar verschil.**
+  - Voorbeeld S&P 500, per jaar over 5 jaar, tegen de index met bruto dividend:
+    - de synthetische Invesco-ETF: +0,08%;
+    - de fysieke Ierse ETF's: −0,11% tot −0,12%.
+  - Verklaring: de kosten zijn bijna gelijk (0,03 tot 0,07%). Het verschil is de 15% Amerikaanse
+    bronbelasting op dividend, die een swap-ETF niet betaalt.
+  - Bij MSCI World blijft de Luxemburgse swap-ETF van Amundi 0,30% achter, met 0,38% kosten.
+  - De tabel op de ETF-pagina toont dit per fonds: tracking difference = kosten + rest.
+- **Het regime staat per dag in de database, met zijn drie invoeren.**
+  - 6.131 dagen sinds 2010: 3.345 risico aan, 1.841 neutraal, 637 risico uit, en 308 zonder stand (te
+    weinig historie in 2010).
+  - Risico uit valt op de bekende momenten: najaar 2011, nazomer 2015, maart 2020, 2022 en april 2025.
+  - Vandaag: risico aan (wereldindex boven het gemiddelde +1, VIX laag +1, high-yield-opslag neutraal 0).
+- Grades op 13 oktober:
+  - indices: 10 met grade en 7 voorlopig (buiten de VS en de eurozone ontbreekt de rentecurve);
+  - ETF's: alle 37 met grade;
+  - obligatie-ETF's: 14 met grade (de geldmarkt-ETF heeft te weinig gegevens).
+- `verify`: 462 van 462 grades zijn exact te herberekenen.
+- Tests: 242 voor de rekenserver en 14 voor de webinterface.
+
+### Keuzes en afwijkingen
+
+- **Alleen risico uit verschuift de grade** (één stapje omlaag); risico aan doet niets. De prompt zegt
+  "hoogstens één stap" zonder richting. Deze voorzichtige keuze staat in `model.yaml`
+  (`regime.grade_shift`) en is daar om te zetten.
+- **High-yield-opslag:** FRED levert die maar drie jaar terug (licentie van ICE). Tot oktober 2024 stemmen
+  daarom alleen de wereldindex en de VIX. Met twee stemmen moeten beide dezelfde kant op wijzen voor risico
+  aan of risico uit.
+- **Waardering van indices** (winstrendement, CAPE): geen gratis bron. Die pijler blijft leeg en de
+  datadekking van indices is daardoor hooguit 75%.
+- **ETF-gegevens:** lege cellen zijn niet geverifieerd (er wordt niets bedacht).
+  - Fondsomvang ontbreekt bij Invesco en UBS (hun sites weigeren geautomatiseerde aanvragen). De
+    omvang-gate staat daar op *niet te controleren*.
+  - Het aantal aandelen ontbreekt voor ACWI, Nasdaq-100 en AEX.
+- **Plausibiliteitsgrens:** wijkt een indexfonds meer dan 1,5% per jaar af, dan telt de tracking difference
+  niet en tellen de kosten. Dat gebeurde bij Amundi Euro Stoxx 50 (V50A): de Yahoo-reeks liep 3,5% per jaar
+  voor op de andere Euro Stoxx 50-ETF's, wat voor een indexfonds niet geloofwaardig is.
+- **Amundi Core MSCI Europe** volgde tot voor kort een andere (ESG-)index. Zijn achterstand van 0,8% per
+  jaar is echte geschiedenis van dit product en telt mee.
+- **Posities van Yahoo:** bij deze run weigerde Yahoo de sessie (HTTP 429). De taak stopt dan meteen en
+  probeert het de volgende werkdag opnieuw.
+- **Verwacht verlies per rating** is een eigen benadering: langjarige gemiddelde wanbetaling (Moody's)
+  maal 60% verlies; obligaties zonder rating tellen als BBB. Het staat in `model.yaml` onder `bond`.
+- **Inflatiegekoppelde fondsen:** het rendement is dat van de uitgever (met de inflatieaanname erin).
+  Hun reële rente (2,77% en 1,90%) staat in het bestand, maar wordt nog niet apart gebruikt.
+
 ## Fase 4 – Aandelen (2026-10-12)
 
 ### Gebouwd

@@ -46,7 +46,8 @@ class YahooProvider(Provider):
     def auth_headers(self) -> dict[str, str]:
         return {"User-Agent": "Mozilla/5.0 (compatible; Graadmeter private research)"}
 
-    def series(self, symbol: str, start: date, end: date) -> PriceSeries:
+    def series(self, symbol: str, start: date, end: date, default_currency: str | None = None) -> PriceSeries:
+        """`default_currency` is used when Yahoo does not state one (some indices)."""
         p1 = int(datetime.combine(start, time.min, tzinfo=UTC).timestamp())
         p2 = int(datetime.combine(end + timedelta(days=1), time.min, tzinfo=UTC).timestamp())
         res = self.get_json(f"/v8/finance/chart/{symbol}",
@@ -58,7 +59,7 @@ class YahooProvider(Provider):
         if not result:
             raise ProviderError(f"yahoo {symbol}: no data", 404)
         meta = result.get("meta") or {}
-        currency, scale = meta.get("currency") or "USD", Decimal(1)
+        currency, scale = meta.get("currency") or default_currency or "USD", Decimal(1)
         if currency in ("GBp", "GBX", "ZAc", "ILA"):  # prices in pence / cents
             currency, scale = {"GBp": "GBP", "GBX": "GBP", "ZAc": "ZAR", "ILA": "ILS"}[currency], Decimal("0.01")
         tz = ZoneInfo(meta.get("exchangeTimezoneName") or "UTC")
@@ -73,6 +74,10 @@ class YahooProvider(Provider):
             if s.get("numerator") and s.get("denominator")
         )
         today = datetime.now(tz).date()
+        # Today's bar counts once the regular session has ended (with a margin for the closing auction).
+        session_end = ((meta.get("currentTradingPeriod") or {}).get("regular") or {}).get("end")
+        if session_end and datetime.now(UTC).timestamp() >= session_end + 1800:
+            today = today + timedelta(days=1)
         out = PriceSeries(currency=currency, call_id=res.call_id)
         seen: set[date] = set()
         for i, ts in enumerate(stamps):
@@ -92,6 +97,41 @@ class YahooProvider(Provider):
                     factor *= ratio
             out.raw_closes.append((d, to_decimal(quote["close"][i]) * scale * factor))
         return out
+
+
+class YahooFundProvider(Provider):
+    """Yahoo Finance fund data (ten largest holdings). Needs a session cookie and a 'crumb'."""
+
+    name = "yahoo_fund"
+    _crumb: str | None = None
+
+    def auth_headers(self) -> dict[str, str]:
+        return {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
+                              "Chrome/124 Safari/537.36"}
+
+    def _get_crumb(self) -> str:
+        if self._crumb is None:
+            try:
+                self.get_text("https://fc.yahoo.com")   # sets the session cookie; answers 404
+            except ProviderError:
+                pass
+            crumb = self.get_text("https://query1.finance.yahoo.com/v1/test/getcrumb").data.strip()
+            if not crumb or "<" in crumb:
+                raise ProviderError("yahoo: no crumb")
+            self._crumb = crumb
+        return self._crumb
+
+    def top_holdings(self, symbol: str) -> dict:
+        """{'top10_weight': fraction, 'holdings': [(name, weight)], 'call_id': id}."""
+        res = self.get_json(f"https://query2.finance.yahoo.com/v10/finance/quoteSummary/{symbol}",
+                            {"modules": "topHoldings", "crumb": self._get_crumb()})
+        result = ((res.data or {}).get("quoteSummary") or {}).get("result") or [{}]
+        holdings = (result[0].get("topHoldings") or {}).get("holdings") or []
+        rows = [(h.get("holdingName") or h.get("symbol"), (h.get("holdingPercent") or {}).get("raw"))
+                for h in holdings]
+        rows = [(n, float(w)) for n, w in rows if w is not None]
+        return {"top10_weight": sum(w for _, w in rows[:10]) if len(rows) >= 10 else None,
+                "holdings": rows[:10], "call_id": res.call_id}
 
 
 class TiingoProvider(Provider):

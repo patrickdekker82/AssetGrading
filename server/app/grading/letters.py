@@ -34,6 +34,11 @@ def cap(grade: str, ceiling: str) -> str:
     return grade if RANK[grade] >= RANK[ceiling] else ceiling
 
 
+def shift(grade: str, notches: int) -> str:
+    """Move a grade by whole notches (B -> B- is -1), within A+ and F."""
+    return GRADES[min(max(RANK[grade] - notches, 0), len(GRADES) - 1)]
+
+
 def apply_hysteresis(score: float, raw: str, previous: str | None, recent_raw: Sequence[str],
                      scale: Mapping[str, float], points: float, days: int) -> str:
     """Keep the previous letter unless the score clears its band by `points`, or the raw letter has

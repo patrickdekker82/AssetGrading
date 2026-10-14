@@ -1,0 +1,34 @@
+# ETFs and bond ETFs (chapter 2 and 6). Fund characteristics come from two hand-maintained files with the
+# source and date of every row (justETF has no official API): config/etfs.csv and config/bond_etfs.csv.
+# Prices and the ten largest holdings come from Yahoo Finance.
+#
+# Index groups: ETFs are only compared with ETFs on the same index.
+#   index: the index asset whose Timing is shown next to the ETF (config/indices.yaml), if followed.
+#   us_dividends: the index holds US stocks, so the fund's domicile decides the withholding tax on them.
+#   reference: Yahoo symbol of a total-return series of the index, if one is freely available; otherwise
+#   the tracking difference is measured against the median ETF on the same index.
+index_groups:
+  msci_world: {name: MSCI World, index: msci-world, us_dividends: true}
+  ftse_all_world: {name: FTSE All-World, us_dividends: true}
+  msci_acwi: {name: MSCI ACWI, us_dividends: true}
+  sp500: {name: S&P 500, index: sp500, us_dividends: true, reference: "^SP500TR"}
+  nasdaq100: {name: Nasdaq-100, index: nasdaq-100, us_dividends: true}
+  msci_em: {name: MSCI Emerging Markets, us_dividends: false}
+  msci_europe: {name: MSCI Europe, us_dividends: false}
+  aex: {name: AEX, index: aex, us_dividends: false}
+  eurostoxx50: {name: Euro Stoxx 50, index: euro-stoxx-50, us_dividends: false}
+bond_categories:
+  government: Staatsobligaties
+  corporate: Bedrijfsobligaties
+  high_yield: High yield
+  emerging: Opkomende markten
+  inflation: Inflatiegekoppeld
+  aggregate: Breed (aggregate)
+  money_market: Geldmarkt
+# Government bond yields shown on the bonds tab for comparison (macro series, not graded).
+rates:
+  - {series: DGS2, name: VS 2 jaar}
+  - {series: DGS10, name: VS 10 jaar}
+  - {series: DFII10, name: VS 10 jaar reëel}
+  - {series: EA_AAA_2Y, name: Eurozone AAA 2 jaar}
+  - {series: EA_AAA_10Y, name: Eurozone AAA 10 jaar}

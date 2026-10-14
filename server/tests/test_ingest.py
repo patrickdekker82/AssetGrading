@@ -55,6 +55,10 @@ VENUE_PRICE = {"BTCUSDT": "110", "COLUSDT": "500", "BTC-USD": 110.0, "USDT-USD":
 
 def fake_world(request: httpx.Request) -> httpx.Response:
     host, path, q = request.url.host, request.url.path, request.url.params
+    if host == "data-api.ecb.europa.eu":
+        body = "KEY,TIME_PERIOD,OBS_VALUE\n" + "".join(
+            f"x,{d.isoformat()},2.5\n" for d in days(TODAY - timedelta(days=10), YESTERDAY) if d.weekday() < 5)
+        return httpx.Response(200, text=body, headers={"content-type": "text/csv"})
     if host == "api.frankfurter.dev":
         start, end = (date.fromisoformat(x) for x in path.removeprefix("/v1/").split(".."))
         rates = {d.isoformat(): {"USD": 1.1, "GBP": 0.85} for d in days(start, end) if d.weekday() < 5}

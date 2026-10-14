@@ -13,6 +13,7 @@ from app.api.routes import router
 from app.db import get_engine
 from app.glossary import load_glossary
 from app.jobs import JobContext, fail_orphaned_runs, schedule_jobs
+from app.markets_config import load_markets_config
 from app.modelconfig import load_model_config
 from app.providers.config import load_providers_config
 from app.providers.recorder import DbRecorder
@@ -49,8 +50,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     providers = Providers(providers_config, DbRecorder(sf))
     stocks = load_stocks_config(settings.config_dir / "stocks.yaml")
+    markets = load_markets_config(settings.config_dir)
     app.state.jobs = JobContext(engine, sf, providers, providers_config, app.state.universes, config, model_version_id,
-                                stocks=stocks)
+                                stocks=stocks, markets=markets)
 
     app.state.scheduler = None
     if settings.scheduler_enabled:

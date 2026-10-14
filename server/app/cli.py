@@ -2,9 +2,10 @@
 
     python -m app.cli check-config        validate configuration
     python -m app.cli lock-model          register a new model version
-    python -m app.cli run <job>           run a job now (crypto, stocks, fx_macro, prune_raw)
-    python -m app.cli grade [YYYY-MM-DD] [crypto|stocks]
+    python -m app.cli run <job>           run a job now (crypto, stocks, markets, fx_macro, prune_raw)
+    python -m app.cli grade [YYYY-MM-DD] [crypto|stocks|markets]
                                           grade a day (default: yesterday, both classes)
+    python -m app.cli regime              store the market regime for every day not stored yet
     python -m app.cli verify [N]          recompute the latest N snapshots (default: all) and compare
     python -m app.cli set-fact <asset> <field> <value>
                                           enter a fact no free source provides, e.g. unlock_90d 0.04,
@@ -37,6 +38,8 @@ def main(argv: list[str]) -> int:
             return _run_job(argv[1] if len(argv) > 1 else "")
         elif command == "grade":
             return _grade(argv[1] if len(argv) > 1 else None, argv[2] if len(argv) > 2 else None)
+        elif command == "regime":
+            return _regime()
         elif command == "verify":
             return _verify(int(argv[1]) if len(argv) > 1 else None)
         elif command == "set-fact":
@@ -79,10 +82,12 @@ def _run_job(name: str) -> int:
 
     with sf() as session:
         version_id = register_model_version(session, model).id
+    from app.markets_config import load_markets_config
     from app.stocks_config import load_stocks_config
 
     stocks = load_stocks_config(settings.config_dir / "stocks.yaml")
-    ctx = JobContext(engine, sf, Providers(cfg, DbRecorder(sf)), cfg, universes, model, version_id, stocks=stocks)
+    ctx = JobContext(engine, sf, Providers(cfg, DbRecorder(sf)), cfg, universes, model, version_id, stocks=stocks,
+                     markets=load_markets_config(settings.config_dir))
     run = run_job(ctx, name, trigger="cli")
     print(json.dumps({"status": run.status, "summary": run.summary, "error": run.error}, indent=2, default=str))
     return 0 if run.status in ("ok", "partial", "skipped") else 1
@@ -122,6 +127,27 @@ def _grade(day: str | None, asset_class: str | None) -> int:
         stocks = load_stocks_config(settings.config_dir / "stocks.yaml")
         report = grade_stocks(sf, config, version_id, stocks, as_of)
         print(json.dumps({"stocks": report.as_dict()}, indent=2))
+    if asset_class in (None, "markets"):
+        from app.grading.markets import grade_markets
+        from app.markets_config import load_markets_config
+
+        report = grade_markets(sf, config, version_id, load_markets_config(settings.config_dir), as_of)
+        print(json.dumps({"markets": report.as_dict()}, indent=2))
+    return 0
+
+
+def _regime() -> int:
+    import json
+    from datetime import UTC, datetime
+
+    from app.grading.regime import update_regime
+    from app.ingest.report import Report
+    from app.jobs import REGIME_START
+
+    _, sf, config, version_id = _context()
+    report = Report()
+    update_regime(sf, config, version_id, datetime.now(UTC).date(), REGIME_START, report)
+    print(json.dumps(report.as_dict(), indent=2))
     return 0
 
 

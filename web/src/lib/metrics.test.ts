@@ -14,6 +14,7 @@ describe("metric formatting", () => {
     expect(groupName("own_history")).toBe("eigen historie");
     expect(groupName("stock_general:Technologie")).toBe("sector Technologie");
     expect(groupName("stock_financial")).toBe("alle banken en verzekeraars");
+    expect(groupName("etf:sp500")).toBe("ETF's op dezelfde index");
     expect(directionText("lower")).toBe("lager is beter");
   });
 });

@@ -113,6 +113,16 @@ providers:
     rate_limit: {calls: 1, per_seconds: 2}
     monthly_budget: null
     raw_retention_days: 90
+  ecb:
+    base_url: https://data-api.ecb.europa.eu
+    rate_limit: {calls: 2, per_seconds: 1}
+    monthly_budget: null
+    raw_retention_days: 90
+  yahoo_fund:
+    base_url: https://query2.finance.yahoo.com
+    rate_limit: {calls: 1, per_seconds: 2}
+    monthly_budget: null
+    raw_retention_days: 90
   openfigi:
     base_url: https://api.openfigi.com
     rate_limit: {calls: 20, per_seconds: 60}
@@ -150,7 +160,7 @@ crypto:
 
 fx:
   base: EUR
-  currencies: [USD, GBP, CHF, JPY, CAD, AUD, NOK, SEK, DKK, CNY, HKD, SGD, PLN]
+  currencies: [USD, GBP, CHF, JPY, CAD, AUD, NOK, SEK, DKK, CNY, HKD, SGD, PLN, INR]
   history_start: "2010-01-01"
 
 macro:
@@ -164,12 +174,19 @@ macro:
     T10Y2Y: Rentecurve 10 jaar min 2 jaar (VS)
     T10Y3M: Rentecurve 10 jaar min 3 maanden (VS)
     VIXCLS: VIX-volatiliteitsindex
+    VXVCLS: VIX over 3 maanden
     DTWEXBGS: Dollarindex (breed, handelsgewogen)
     T10YIE: Verwachte inflatie 10 jaar (VS)
+    T5YIE: Verwachte inflatie 5 jaar (VS)
+  # ECB yield curve for AAA-rated euro area government bonds (spot rates).
+  ecb_series:
+    EA_AAA_2Y: {key: "YC/B.U2.EUR.4F.G_N_A.SV_C_YM.SR_2Y", label: "Rente staatsobligaties 2 jaar (eurozone, AAA)"}
+    EA_AAA_10Y: {key: "YC/B.U2.EUR.4F.G_N_A.SV_C_YM.SR_10Y", label: "Rente staatsobligaties 10 jaar (eurozone, AAA)"}
 
 schedule:                            # UTC
   crypto: "5 0 * * *"                # 00:05, after the daily close
   # Use day names: APScheduler numbers weekdays from Monday = 0, unlike standard cron.
   fx_macro: "30 16 * * mon-fri"      # after the ECB reference rates (around 16:00 CET)
   prune_raw: "30 3 * * *"
+  markets: "45 21 * * mon-fri"       # indices, ETFs and the regime, before the stock run uses the regime
   stocks: "30 22 * * mon-fri"        # well after the US close (16:00 New York = 20:00 or 21:00 UTC)

@@ -137,7 +137,7 @@ unlock_365d: {direction: lower, unit: ratio}
 unlock_90d: {direction: lower, unit: ratio}
 unlock_insiders_90d: {direction: none, unit: ratio}
 volatility: {direction: lower, unit: ratio}
-volatility_vs_history: {direction: lower, unit: score}
+volatility_vs_history: {direction: lower, unit: ratio}
 walt: {direction: higher, unit: years}
 yield_curve_slope: {direction: higher, unit: ratio}
 yield_per_duration: {direction: higher, unit: ratio}

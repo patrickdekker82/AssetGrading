@@ -186,3 +186,39 @@ def sig(value: float, digits: int = 7) -> float:
 def to_points(series: pd.Series, digits: int = 7) -> list[dict]:
     return [{"time": d.isoformat(), "value": sig(float(v), digits)} for d, v in series.items()
             if v is not None and math.isfinite(float(v))]
+
+
+# Indices and ETFs (technical.yaml chart_sets.indices_etfs).
+INDEX_INDICATORS = [
+    IndicatorDef("sma200", "Gemiddelde 200 dagen", "price", "score", "#e91e63"),
+    IndicatorDef("sma10m", "Gemiddelde 10 maanden", "price", "score", "#7b1fa2"),
+    IndicatorDef("drawdown", "Daling vanaf de top (%)", "drawdown", "score", "#c62828"),
+    IndicatorDef("rs_index", "Sterkte t.o.v. vergelijking", "rs", "score", "#3949ab"),
+    IndicatorDef("vix", "VIX", "vix", "context", "#6a1b9a"),
+    IndicatorDef("vix_ratio", "VIX / VIX 3 maanden", "vix_ratio", "context", "#ef6c00"),
+    IndicatorDef("breadth", "Aandelen boven 200-daags gemiddelde (%)", "breadth", "context", "#2e7d32"),
+]
+
+INDEX_DEFAULT_ON = {"sma200", "sma10m"}
+
+
+def index_indicators(ohlc: pd.DataFrame, benchmark: pd.Series | None, vix: pd.Series | None,
+                     vix3m: pd.Series | None, breadth: pd.Series | None) -> dict[str, pd.Series]:
+    close = ohlc["close"].astype(float)
+    c = close.to_numpy(dtype=np.float64)
+    months = sample(close, "1M")
+    out: dict[str, pd.Series] = {
+        "sma200": _clean(talib.SMA(c, 200), close.index),
+        "sma10m": months.rolling(10).mean().reindex(close.index).ffill(),
+        "drawdown": (close / close.cummax() - 1) * 100,
+    }
+    if benchmark is not None and not benchmark.empty:
+        out["rs_index"] = close / benchmark.reindex(close.index).ffill()
+    if vix is not None and not vix.empty:
+        out["vix"] = vix.loc[vix.index >= close.index[0]]
+        if vix3m is not None and not vix3m.empty:
+            out["vix_ratio"] = (vix / vix3m).dropna().loc[lambda s: s.index >= close.index[0]]
+    if breadth is not None and not breadth.empty:
+        out["breadth"] = breadth * 100
+    cleaned = {k: v.dropna() for k, v in out.items()}
+    return {k: v for k, v in cleaned.items() if not v.empty}

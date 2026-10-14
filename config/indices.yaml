@@ -1,0 +1,23 @@
+# Indices (chapter 2: "circa 15 wereldwijde indices"; they also feed the market regime).
+# Prices from Yahoo Finance in the index's own currency. `curve`: which yield curve belongs to the market
+# (us = FRED, ea = ECB euro area AAA); `breadth`: the followed stock list used for "share above the
+# 200-day average" (only where the app follows the members); `world: true` marks the regime's world index.
+indices:
+  - {slug: msci-world, name: MSCI World, yahoo: "^990100-USD-STRD", currency: USD, region: Wereld, curve: us, world: true}
+  - {slug: sp500, name: S&P 500, yahoo: "^GSPC", currency: USD, region: Verenigde Staten, curve: us, breadth: stocks_us}
+  - {slug: nasdaq-100, name: Nasdaq-100, yahoo: "^NDX", currency: USD, region: Verenigde Staten, curve: us}
+  - {slug: dow-jones, name: Dow Jones Industrial Average, yahoo: "^DJI", currency: USD, region: Verenigde Staten, curve: us}
+  - {slug: russell-2000, name: Russell 2000, yahoo: "^RUT", currency: USD, region: Verenigde Staten, curve: us}
+  - {slug: aex, name: AEX, yahoo: "^AEX", currency: EUR, region: Nederland, curve: ea, breadth: stocks_aex}
+  - {slug: euro-stoxx-50, name: Euro Stoxx 50, yahoo: "^STOXX50E", currency: EUR, region: Eurozone, curve: ea}
+  - {slug: stoxx-600, name: Stoxx Europe 600, yahoo: "^STOXX", currency: EUR, region: Europa, curve: ea}
+  - {slug: dax, name: DAX, yahoo: "^GDAXI", currency: EUR, region: Duitsland, curve: ea}
+  - {slug: cac-40, name: CAC 40, yahoo: "^FCHI", currency: EUR, region: Frankrijk, curve: ea}
+  - {slug: ftse-100, name: FTSE 100, yahoo: "^FTSE", currency: GBP, region: Verenigd Koninkrijk}
+  - {slug: smi, name: SMI, yahoo: "^SSMI", currency: CHF, region: Zwitserland}
+  - {slug: nikkei-225, name: Nikkei 225, yahoo: "^N225", currency: JPY, region: Japan}
+  - {slug: hang-seng, name: Hang Seng, yahoo: "^HSI", currency: HKD, region: Hongkong}
+  - {slug: sse-composite, name: SSE Composite (Shanghai), yahoo: "000001.SS", currency: CNY, region: China}
+  - {slug: sensex, name: BSE Sensex, yahoo: "^BSESN", currency: INR, region: India}
+  - {slug: tsx, name: S&P/TSX Composite, yahoo: "^GSPTSE", currency: CAD, region: Canada, curve: null}
+history_start: "2005-01-01"

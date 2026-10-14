@@ -47,7 +47,7 @@ terms:
     uitleg: Het bereik van de grade als elk gewicht 20% hoger of lager zou zijn. Een smalle band betekent een stevige grade.
   marktregime:
     label: Marktregime
-    uitleg: Een dagelijkse stand (risico aan, neutraal, risico uit) op basis van de wereldindex, de renteopslag op high-yield-obligaties en de VIX.
+    uitleg: "Een stand per week (risico aan, neutraal, risico uit) uit drie invoeren: de wereldindex tegenover zijn 10-maandsgemiddelde, de renteopslag op high-yield-obligaties en de VIX, elk tegenover de eigen historie. Bij risico uit gaat de grade van aandelen en crypto één stapje omlaag; gates blijven gelden."
   modelversie:
     label: Modelversie
     uitleg: Het versienummer van de gebruikte instellingen (pijlers, gewichten, gates). Elke wijziging geeft een nieuwe versie.
@@ -123,6 +123,9 @@ terms:
   beurswaarde:
     label: Beurswaarde
     uitleg: Het aantal aandelen (verwaterd, uit de laatste SEC-cijfers) maal de slotkoers zoals die op de beurs gold.
+  rest_na_kosten:
+    label: Rest na kosten
+    uitleg: Tracking difference plus de lopende kosten. Wat overblijft komt van belasting op dividend, opbrengst uit het uitlenen van effecten en de manier van repliceren. Positief betekent dat het fonds meer terugverdient dan de kosten.
   gecorrigeerde_koers:
     label: Gecorrigeerde koers
     uitleg: Koersen in de grafiek en voor momentum zijn gecorrigeerd voor dividend en splitsingen, zodat een uitkering niet als koersdaling telt.
@@ -226,7 +229,7 @@ metrics:
     uitleg: "Waarde van de dollar tegenover andere grote valuta. Een sterke dollar drukt grondstoffen en crypto."
   domicile_tax_score:
     label: "Domicilie"
-    uitleg: "Fiscale gevolgen van het vestigingsland van het fonds, zoals dividendbelasting."
+    uitleg: "Bronbelasting op Amerikaanse dividenden door het vestigingsland van het fonds: Ierland 15%, Luxemburg 30%. Synthetische fondsen en indices zonder Amerikaanse aandelen hebben er geen last van. Hoger (minder belasting) is beter."
   duration:
     label: "Duration"
     uitleg: "Gevoeligheid voor renteveranderingen in jaren. Bij duration 7 daalt de koers ongeveer 7% als de rente 1 procentpunt stijgt."
@@ -259,7 +262,7 @@ metrics:
     uitleg: "Geld dat netto in of uit beursfondsen op deze asset stroomt."
   expected_net_yield:
     label: "Verwacht netto rendement"
-    uitleg: "Effectief rendement min verwacht verlies door wanbetaling en kosten."
+    uitleg: "Effectief rendement min het verwachte jaarlijkse verlies door wanbetaling (per rating, uit langjarige gemiddelden) en min de lopende kosten."
   fcf_yield:
     label: "Vrije-kasstroomrendement"
     uitleg: "Vrije kasstroom gedeeld door beurswaarde."
@@ -430,7 +433,7 @@ metrics:
     uitleg: "Verwachte richting van de rente van de eerste valuta ten opzichte van de tweede."
   rating_quality:
     label: "Ratings"
-    uitleg: "Gemiddelde kredietbeoordeling van de obligaties."
+    uitleg: "Gemiddelde kredietbeoordeling van de obligaties, gewogen naar hun aandeel: AAA is 100, CCC en lager 5."
   real_customer_revenue:
     label: "Omzet echte afnemers"
     uitleg: "Omzet van betalende gebruikers, zonder door tokens gesubsidieerd gebruik."
@@ -457,7 +460,7 @@ metrics:
     uitleg: "Hoe ver de reële effectieve wisselkoers (BIS) boven de eigen historie ligt. Hoog betekent duur."
   regime_score:
     label: "Marktregime"
-    uitleg: "Stand van het marktregime omgezet naar een score."
+    uitleg: "Stand van het marktregime als score: risico aan 100, neutraal 50, risico uit 0."
   regulated_volume:
     label: "Omzet gereguleerde beurzen"
     uitleg: "Handelsvolume alleen op gereguleerde beurzen; schijnhandel elders telt niet mee."
@@ -514,7 +517,7 @@ metrics:
     uitleg: "Gewicht van de tien grootste posities in het fonds."
   tracking_difference:
     label: "Tracking difference"
-    uitleg: "Werkelijk verschil tussen fondsrendement en indexrendement over 3 tot 5 jaar. Dichter bij nul of positief is beter."
+    uitleg: "Jaarrendement van het fonds in euro min dat van de index met herbelegd dividend, over 5 jaar (anders 3). Is zo'n indexreeks niet gratis te krijgen, dan het verschil met de middelste ETF op dezelfde index. Dichter bij nul of positief is beter."
   underlying_grade_score:
     label: "Grade onderliggende"
     uitleg: "Score van de onderliggende asset uit het eigen model."
@@ -535,7 +538,7 @@ metrics:
     uitleg: "Hoe sterk de koers schommelt, op jaarbasis, gemeten over het laatste jaar."
   volatility_vs_history:
     label: "Volatiliteit t.o.v. historie"
-    uitleg: "Huidige volatiliteit vergeleken met de eigen historie."
+    uitleg: "Schommeling van de koers over drie maanden op jaarbasis, vergeleken met de eigen historie. Lager is rustiger."
   walt:
     label: "Resterende huurtermijn"
     uitleg: "Gemiddelde resterende looptijd van de huurcontracten, gewogen naar huur."

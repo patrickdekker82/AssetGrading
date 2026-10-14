@@ -38,6 +38,8 @@ const GROUP_NAMES: Record<string, string> = {
 export function groupName(group: string | null | undefined): string {
   if (!group) return "";
   const [template, sector] = group.split(":");
+  if (sector && template === "etf") return "ETF's op dezelfde index";
+  if (sector && template === "bond") return "dezelfde categorie";
   if (sector) return `sector ${sector}`;
   return GROUP_NAMES[template] ?? template;
 }

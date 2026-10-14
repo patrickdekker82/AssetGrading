@@ -72,7 +72,9 @@ export default async function AssetPage({ params }: Props) {
             <h1>{d.asset.name} <span className="muted">{d.asset.ticker}</span></h1>
             <p className="muted small">
               {d.asset.template_name ? <><Term id="sjabloon">Sjabloon</Term>: {d.asset.template_name}</> : null}
-              {d.asset.sector && <> · <Term id="sector">Sector</Term>: {d.asset.sector}</>}
+              {d.asset.sector && (d.asset.asset_class === "stock"
+                ? <> · <Term id="sector">Sector</Term>: {d.asset.sector}</>
+                : <> · {({ etf: "Index", bond: "Categorie", index: "Regio" } as Record<string, string>)[d.asset.asset_class] ?? "Groep"}: {d.asset.sector}</>)}
               {d.asset.country && <> · {d.asset.country}</>}
               {d.price && <> · {euro.format(d.price.close_eur)}
                 {d.price.quote_currency !== "EUR" && <> ({native.format(d.price.close_native)} {d.price.quote_currency})</>}
@@ -104,6 +106,9 @@ export default async function AssetPage({ params }: Props) {
           <p className="muted small">Bij de data: {s.data_notes.join(" · ")}</p>
         )}
       </header>
+
+      {(d.asset.asset_class === "etf" || d.asset.asset_class === "bond") && <Characteristics categories={d.asset.categories} />}
+      {d.asset.asset_class === "etf" && <EtfPeers id={d.asset.id} />}
 
       {s && d.pillars && d.pillars.length > 0 && (
         <>
@@ -226,4 +231,81 @@ function GradeValue({ s }: { s: NonNullable<Detail["snapshot"]> }) {
   if (!s.letter) return <span className="muted">geen</span>;
   const cls = s.status === "provisional" ? "grade grade-provisional big" : `grade grade-${s.letter[0].toLowerCase()} big`;
   return <span className={cls}>{s.letter}</span>;
+}
+
+const CHARACTERISTIC_LABELS: Record<string, string> = {
+  issuer: "Uitgever", domicile: "Domicilie", replication: "Replicatie", distribution: "Dividend",
+  securities_lending: "Uitlenen van effecten", launch_date: "Start", category: "Categorie",
+  currency_hedged: "Valutarisico afgedekt naar", fund_currency: "Fondsvaluta", leveraged_inverse: "Hefboom of invers",
+};
+const VALUE_LABELS: Record<string, string> = {
+  full: "volledig fysiek", sampling: "fysiek, steekproef", synthetic: "synthetisch (swap)", acc: "herbeleggend",
+  dist: "uitkerend", yes: "ja", no: "nee",
+};
+
+function Characteristics({ categories }: { categories: string[] }) {
+  const rows = categories.map((c) => c.split(":")).filter(([k]) => k in CHARACTERISTIC_LABELS);
+  if (!rows.length) return null;
+  return (
+    <section className="card">
+      <h2 className="card-title">Kenmerken</h2>
+      <dl className="facts small">
+        {rows.map(([k, ...v]) => (
+          <div key={k}><dt className="muted">{CHARACTERISTIC_LABELS[k]}</dt><dd>{VALUE_LABELS[v.join(":")] ?? v.join(":")}</dd></div>
+        ))}
+      </dl>
+      <p className="muted small">Uit het zelf bijgehouden bestand met bron en datum per fonds (config/etfs.csv of bond_etfs.csv).</p>
+    </section>
+  );
+}
+
+type PeerRow = { id: string; name: string; letter: string | null; status: string; score: number | null;
+  tracking_difference: number | null; ongoing_charges: number | null; rest_after_costs: number | null;
+  fund_size: number | null; domicile: string | null; replication: string | null; distribution: string | null;
+  securities_lending: string | null; td_source: string | null };
+const pct = new Intl.NumberFormat("nl-NL", { style: "percent", minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const mln = new Intl.NumberFormat("nl-NL", { maximumFractionDigits: 0 });
+
+async function EtfPeers({ id }: { id: string }) {
+  const p = await fetchServer<{ group: string | null; rows: PeerRow[] }>(`/api/assets/${encodeURIComponent(id)}/peers`);
+  if (!p?.group || p.rows.length < 2) return null;
+  const source = p.rows.find((r) => r.td_source)?.td_source;
+  return (
+    <section className="card">
+      <h2 className="card-title">ETF&apos;s op dezelfde index: {p.group}</h2>
+      <div className="table-wrap">
+        <table className="ranking">
+          <thead>
+            <tr>
+              <th>Fonds</th><th>Grade</th>
+              <th className="num"><Term id="tracking_difference">Tracking difference</Term></th>
+              <th className="num"><Term id="ongoing_charges">Kosten</Term></th>
+              <th className="num"><Term id="rest_na_kosten">Rest na kosten</Term></th>
+              <th>Domicilie</th><th>Replicatie</th><th>Uitlenen</th><th className="num">Omvang (mln €)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {p.rows.map((r) => (
+              <tr key={r.id} className={r.id === id ? "row-current" : undefined}>
+                <td><Link href={`/etfs/${r.id}`}>{r.name}</Link></td>
+                <td>{r.status === "no_grade" ? "–" : r.letter}</td>
+                <td className="num">{r.tracking_difference === null ? "–" : pct.format(r.tracking_difference)}</td>
+                <td className="num">{r.ongoing_charges === null ? "–" : pct.format(r.ongoing_charges)}</td>
+                <td className="num">{r.rest_after_costs === null ? "–" : pct.format(r.rest_after_costs)}</td>
+                <td>{r.domicile ?? "–"}</td>
+                <td>{r.replication ? VALUE_LABELS[r.replication] ?? r.replication : "–"}</td>
+                <td>{r.securities_lending ? VALUE_LABELS[r.securities_lending] : "–"}</td>
+                <td className="num">{r.fund_size === null ? "–" : mln.format(r.fund_size / 1e6)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="muted small">
+        Tracking difference per jaar = kosten + rest. De kosten verklaren het grootste deel; de rest komt van
+        belasting op dividend (domicilie, of synthetisch zonder Amerikaanse bronbelasting), opbrengst uit het
+        uitlenen van effecten en de manier van repliceren.{source ? ` Gemeten: ${source}.` : ""}
+      </p>
+    </section>
+  );
 }
