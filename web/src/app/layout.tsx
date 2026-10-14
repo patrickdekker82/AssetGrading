@@ -35,7 +35,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               </Link>
               <div className="header-links">
                 <SearchBox />
-                <Link href="/verbruik" className="header-link">Verbruik</Link>
+                <Link href="/verbruik" className="header-link">Instellingen</Link>
                 <HealthBadge health={health} />
               </div>
             </div>

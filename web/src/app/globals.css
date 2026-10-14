@@ -322,6 +322,9 @@ h3 { font-size: 15px; margin: 0; }
   .pillar-row > :nth-child(4), .pillar-row > :nth-child(5) { display: none; }
   .chart { height: 380px; margin: 0 8px; }
   .search input { width: 140px; }
+  .header-row { flex-wrap: wrap; gap: 8px; }
+  .header-links { flex-wrap: wrap; gap: 8px 12px; }
+  .tabs { margin: 0 -16px; padding: 0 16px; }
 }
 .regime-card { padding: 16px; margin-bottom: 16px; }
 .regime { padding: 2px 8px; border-radius: 6px; font-size: 15px; }
@@ -336,3 +339,7 @@ h3 { font-size: 15px; margin: 0; }
 .facts dt { font-size: 12px; }
 .facts dd { margin: 0; }
 .row-current td { background: var(--accent-soft); }
+
+.source-list { list-style: none; margin: 0; padding: 0 16px 12px; }
+.source-list li { padding: 8px 0; border-top: 1px solid var(--border); }
+.source-list li:first-child { border-top: 0; }

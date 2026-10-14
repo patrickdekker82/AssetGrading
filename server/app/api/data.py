@@ -141,3 +141,56 @@ def coverage(request: Request) -> dict:
         "crypto_assets": [dict(r) for r in missing],
         "totals": dict(counts),
     }
+
+
+@router.get("/ai/usage")
+def ai_usage(request: Request) -> dict:
+    """Language-model use this month against the hard budget (chapter 9), for the settings page."""
+    from app.ai.explanation import month_start
+
+    ai = request.app.state.ai_config
+    jobs = request.app.state.jobs
+    start = month_start(datetime.now(UTC))
+    with jobs.sf() as session:
+        calls = session.execute(text(
+            """
+            SELECT component, model, COUNT(*) AS calls, COUNT(*) FILTER (WHERE passed) AS passed,
+                   COUNT(*) FILTER (WHERE mode = 'batch') AS batch, COALESCE(SUM(cost_usd), 0) AS cost,
+                   COALESCE(SUM((usage->>'input_tokens')::bigint), 0) AS input_tokens,
+                   COALESCE(SUM((usage->>'output_tokens')::bigint), 0) AS output_tokens,
+                   COALESCE(SUM((usage->>'cache_read_input_tokens')::bigint), 0) AS cache_read_tokens
+            FROM llm_call WHERE created_at >= :s GROUP BY component, model ORDER BY component, model
+            """), {"s": start}).mappings().all()
+        reserved = session.execute(text(
+            "SELECT COALESCE(SUM(estimated_cost_usd), 0), COUNT(*) FROM llm_batch WHERE status = 'submitted'")).one()
+        shown = session.execute(text(
+            """
+            SELECT COUNT(*) FILTER (WHERE source = 'model') AS model, COUNT(*) FILTER (WHERE source = 'template')
+                   AS template
+            FROM (SELECT DISTINCT ON (asset_id) source FROM explanation WHERE model_version_id = :v
+                  ORDER BY asset_id, created_at DESC, id DESC) e
+            """), {"v": jobs.model_version_id}).mappings().one()
+    spent = sum(float(c["cost"]) for c in calls)
+    return {
+        "month": start.strftime("%Y-%m"),
+        "key_configured": jobs.llm_client is not None,
+        "budget_usd": ai.monthly_budget_usd,
+        "spent_usd": round(spent, 4),
+        "reserved_usd": round(float(reserved[0]), 4),
+        "pending_batches": int(reserved[1]),
+        "components": [{"component": "explanation", "label_nl": "Toelichting", "model": ai.explanation.model,
+                        "prompt_version": ai.explanation.prompt_version, "batch": True,
+                        "regenerate_shift_points": ai.explanation.regenerate_shift_points}],
+        "calls": [{**dict(c), "cost": round(float(c["cost"]), 4)} for c in calls],
+        "explanations": {"model": int(shown["model"] or 0), "template_after_check": int(shown["template"] or 0)},
+    }
+
+
+@router.get("/sources")
+def sources(request: Request) -> list[dict]:
+    import yaml
+
+    from app.settings import get_settings
+
+    path = get_settings().config_dir / "sources.yaml"
+    return yaml.safe_load(path.read_text(encoding="utf-8"))["sources"]

@@ -36,8 +36,8 @@ def explain(name: str, result: dict, config: ModelConfig, labels: dict[str, str]
                      f"{result['peg_safety']} op een schaal van 1 (sterk) tot 5 (zwak).")
     elif status == "speculative":
         parts.append(f"{name} wordt beoordeeld als memecoin: er is geen onderbouwde waardering mogelijk, alleen een "
-                     f"veiligheidscontrole. De grade is {result['letter']} met het label speculatie; hoger dan C kan "
-                     "een memecoin in dit model niet komen.")
+                     f"veiligheidscontrole. De grade is {result['letter']} met het label speculatie; hoger dan "
+                     f"{template.max_grade or 'C'} kan een memecoin in dit model niet komen.")
         parts.extend(result.get("notes", []))
         if result.get("timing") is not None:
             parts.append(f"De technische score (Timing) is {_fmt(result['timing'])} van 100; die zegt iets over de "
@@ -60,8 +60,9 @@ def explain(name: str, result: dict, config: ModelConfig, labels: dict[str, str]
         if scored:
             parts.append("Per pijler: " + _join([f"{p['name_nl']} {_fmt(p['score'])}" for p in scored]) + ".")
         if result.get("letter_low") and result.get("letter_high") and result["letter_low"] != result["letter_high"]:
-            parts.append(f"Met andere gewichten (20% hoger of lager) ligt de grade tussen {result['letter_low']} en "
-                         f"{result['letter_high']}.")
+            shift = _fmt(config.settings.stability.band_weight_shift * 100)
+            parts.append(f"Met andere gewichten ({shift}% hoger of lager) ligt de grade tussen {result['letter_low']} "
+                         f"en {result['letter_high']}.")
 
     points = _metric_points(result, labels)
     if len(points) >= 2:
@@ -100,23 +101,33 @@ def _quality_vs_timing(quality: float, timing: float) -> str:
     return "Kwaliteit en koerstrend liggen rond het midden van de groep."
 
 
-def _what_would_change(result: dict, config: ModelConfig) -> str:
+def change_thresholds(result: dict, config: ModelConfig) -> dict | None:
+    """The scores at which the letter would move, including the hysteresis margin."""
     scale = config.settings.letter_scale
     margin = config.settings.stability.hysteresis_points
     letter = result.get("hysteresis_letter") or result.get("raw_letter")
     if letter not in GRADES:
-        return ""
+        return None
     low, high = bands(scale)[letter]
     i = GRADES.index(letter)
-    up = GRADES[i - 1] if i > 0 else None
-    down = GRADES[i + 1] if i + 1 < len(GRADES) else None
+    out = {"margin": int(round(margin)), "capped": result.get("letter") != letter}
+    if i > 0:
+        out["up"] = {"grade": GRADES[i - 1], "above": _fmt(min(high + margin, 100))}
+    if i + 1 < len(GRADES):
+        out["down"] = {"grade": GRADES[i + 1], "below": _fmt(max(low - margin, 0))}
+    return out
+
+
+def _what_would_change(result: dict, config: ModelConfig) -> str:
+    t = change_thresholds(result, config)
+    if t is None:
+        return ""
     pieces = []
-    if up:
-        pieces.append(f"boven {_fmt(min(high + margin, 100))} wordt het {up}")
-    if down:
-        pieces.append(f"onder {_fmt(max(low - margin, 0))} zakt het naar {down}")
+    if "up" in t:
+        pieces.append(f"boven {t['up']['above']} wordt het {t['up']['grade']}")
+    if "down" in t:
+        pieces.append(f"onder {t['down']['below']} zakt het naar {t['down']['grade']}")
     if not pieces:
         return ""
-    capped = result.get("letter") != letter
-    note = " Een harde regel houdt de grade nu lager." if capped else ""
-    return f"Wat de grade zou veranderen: {' en '.join(pieces)} (inclusief de marge van {margin:.0f} punten).{note}"
+    note = " Een harde regel houdt de grade nu lager." if t["capped"] else ""
+    return f"Wat de grade zou veranderen: {' en '.join(pieces)} (inclusief de marge van {t['margin']} punten).{note}"

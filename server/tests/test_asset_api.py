@@ -23,6 +23,7 @@ def client(db, world, model, test_database_url, monkeypatch):  # noqa: F811 (fix
     cfg, _, universes = world
     monkeypatch.setenv("DATABASE_URL", test_database_url)
     monkeypatch.setenv("SCHEDULER_ENABLED", "false")
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)     # the app must work without a language model
     get_settings.cache_clear()
     get_engine.cache_clear()
     from app.main import app
@@ -53,6 +54,23 @@ def test_asset_detail_has_all_sections(client):
     assert isinstance(d["gates"], list)
     assert d["explanation"].startswith("Bitcoin")
     assert d["price"]["quote_currency"] == "USD"
+
+
+def test_without_api_key_the_template_text_is_shown(client):
+    d = client.get("/api/assets/bitcoin").json()
+    assert d["explanation_source"] == "sjabloon" and d["explanation_meta"]["rejected"] is False
+    usage = client.get("/api/ai/usage").json()
+    assert usage["key_configured"] is False and usage["spent_usd"] == 0 and usage["budget_usd"] > 0
+    assert usage["components"][0]["model"] == "claude-haiku-5-5"
+    r = client.post("/api/jobs/explanations/run")
+    assert r.status_code in (202, 503)      # the scheduler is off in tests
+
+
+def test_sources_page_has_the_required_attributions(client):
+    sources = client.get("/api/sources").json()
+    required = {s["name"] for s in sources if s.get("required")}
+    assert required == {"CoinGecko", "TradingView", "FRED", "alternative.me"}
+    assert all(s["url"].startswith("https://") for s in sources)
 
 
 def test_unknown_asset_is_404(client):
@@ -121,6 +139,29 @@ def test_watchlist_round_trip(client):
     assert [r["id"] for r in rows] == ["collide"]
     assert client.delete("/api/watchlist/collide").json()["in_watchlist"] is False
     assert client.get("/api/watchlist").json() == []
+
+
+def test_watchlist_keeps_an_asset_whose_grade_is_older(client, test_database_url):
+    """A stock fetched once and watched still shows, with the date of its last grade."""
+    engine = get_engine()
+    with engine.begin() as conn:
+        conn.execute(text(
+            """
+            INSERT INTO asset (asset_class, symbol, name, slug) VALUES ('stock', 'OLD', 'Oud Aandeel', 'old');
+            INSERT INTO grade_snapshot (asset_id, as_of, model_version_id, template_id, status, score, quality,
+                                        timing, coverage, letter, peg_safety, price_eur, knowledge_time, inputs,
+                                        result)
+            SELECT (SELECT id FROM asset WHERE slug = 'old'), as_of - 40, model_version_id, 'stock_general',
+                   'no_grade', NULL, NULL, NULL, 0, NULL, NULL, NULL, knowledge_time, '{}',
+                   '{"status": "no_grade", "pillars": [], "gates": [], "reason_nl": "Te weinig data."}'
+            FROM grade_snapshot ORDER BY as_of DESC LIMIT 1;
+            """))
+    assert client.get("/api/grades?tab=watchlist").json()["rows"] == []
+    client.post("/api/watchlist/old")
+    rows = client.get("/api/grades?tab=watchlist").json()["rows"]
+    assert [r["id"] for r in rows] == ["old"]
+    assert rows[0]["as_of"] == (YESTERDAY - timedelta(days=40)).isoformat()
+    client.delete("/api/watchlist/old")
 
 
 def test_grades_rows_carry_sparkline_and_links(client):

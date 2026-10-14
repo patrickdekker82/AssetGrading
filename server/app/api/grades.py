@@ -74,7 +74,8 @@ def grades(request: Request, tab: str = "crypto") -> dict:
                 SELECT asset_id, array_agg(round(close_eur::numeric, 10)::float8 ORDER BY ts) AS closes
                 FROM price_daily_eur WHERE ts > :d - 90 AND ts <= :d GROUP BY asset_id
             )
-            SELECT a.slug, a.asset_class, a.sector, a.country, a.name, a.symbol, a.categories, g.template_id, g.status,
+            SELECT g.as_of, a.slug, a.asset_class, a.sector, a.country, a.name, a.symbol, a.categories, g.template_id,
+                   g.status,
                    g.letter, g.score, g.quality, g.timing, g.coverage, g.peg_safety, g.price_eur, g.result,
                    l.rank AS mcap_rank, l.included, l.exclusion, l.market_cap_eur, l.lists,
                    m.letter AS letter_month_ago, sp.closes AS spark, (w.asset_id IS NOT NULL) AS watched
@@ -87,15 +88,17 @@ def grades(request: Request, tab: str = "crypto") -> dict:
             WHERE a.asset_class = ANY(:c)
               AND g.as_of = (SELECT max(as_of) FROM grade_snapshot x
                              WHERE x.asset_id = g.asset_id AND x.model_version_id = :v)
-              AND g.model_version_id = :v AND g.as_of > :d - 7
+              AND g.model_version_id = :v
+              -- The watchlist keeps an asset whose last grade is older (fetched once, not in a list).
+              AND (g.as_of > :d - 7 OR (:watch AND w.asset_id IS NOT NULL))
             """
         ), {"d": as_of, "v": jobs.model_version_id, "c": classes, "u": universes,
-            "lag": LIST_LAG_DAYS[tab]}).mappings().all()
+            "lag": LIST_LAG_DAYS[tab], "watch": tab == "watchlist"}).mappings().all()
     out = []
     for r in rows:
         res = r["result"]
         out.append({
-            "id": r["slug"], "name": r["name"], "ticker": r["symbol"], "sector": r["sector"],
+            "id": r["slug"], "as_of": r["as_of"], "name": r["name"], "ticker": r["symbol"], "sector": r["sector"],
             "country": r["country"],
             "template": config.templates[r["template_id"]].name_nl, "status": r["status"], "letter": r["letter"],
             "letter_low": res.get("letter_low"), "letter_high": res.get("letter_high"), "score": r["score"],

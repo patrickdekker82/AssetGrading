@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.gzip import GZipMiddleware
 from sqlalchemy.orm import sessionmaker
 
+from app.ai import load_ai_config, make_client
 from app.api.assets import router as assets_router
 from app.api.data import router as data_router
 from app.api.grades import router as grades_router
@@ -52,9 +53,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     providers = Providers(providers_config, DbRecorder(sf))
     stocks = load_stocks_config(settings.config_dir / "stocks.yaml")
     markets = load_markets_config(settings.config_dir)
+    ai = load_ai_config(settings.config_dir / "ai.yaml")
+    app.state.ai_config = ai
+    labels = {k: v.label for k, v in app.state.glossary.metrics.items()}
     app.state.jobs = JobContext(engine, sf, providers, providers_config, app.state.universes, config, model_version_id,
                                 stocks=stocks, markets=markets,
-                                commodities=load_commodities_config(settings.config_dir))
+                                commodities=load_commodities_config(settings.config_dir),
+                                ai=ai, labels=labels, llm_client=make_client(ai))
 
     app.state.scheduler = None
     if settings.scheduler_enabled:

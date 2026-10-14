@@ -1,0 +1,26 @@
+# Language-model components (chapter 9). Not part of the model version: a language model never supplies a
+# number and never changes a score, so nothing here changes a grade.
+# Model names and prices checked against the Claude API documentation on 2026-10-14.
+
+api_key_env: ANTHROPIC_API_KEY       # without a key the app shows the fixed template text
+monthly_budget_usd: 5.00             # hard stop per calendar month (UTC), batches included
+
+# US dollars per million tokens, standard (non-batch) price. Cache writes cost 1.25x and cache reads
+# 0.1x the input price; the batch API halves everything.
+pricing:
+  claude-haiku-5-5: {input: 0.10, output: 0.50}
+  claude-sonnet-5-5: {input: 2.00, output: 10.00}
+  claude-opus-5-5: {input: 4.00, output: 20.00}
+cache_write_factor: 1.25
+cache_read_factor: 0.10
+batch_discount: 0.50
+
+components:
+  explanation:
+    model: claude-haiku-5-5          # cheap model for explanations (chapter 9)
+    prompt_version: explanation-1    # bump when the instruction in app/ai/explanation.py changes
+    max_tokens: 4000                 # thinking counts toward this limit
+    effort: low
+    regenerate_shift_points: 5       # rewrite only when the grade changes or a pillar moves more than this
+    words: {min: 110, max: 220}      # chapter 2 asks for 120 to 200; a little slack before a retry
+    batch_poll_hours: 24             # a batch older than this is given up and its reservation released

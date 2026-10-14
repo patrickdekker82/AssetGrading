@@ -10,7 +10,7 @@ import {
   STATUS_LABELS,
 } from "@/lib/format";
 
-export const metadata: Metadata = { title: "Verbruik · Graadmeter" };
+export const metadata: Metadata = { title: "Instellingen en verbruik · Graadmeter" };
 
 type ProviderUsage = {
   provider: string;
@@ -36,6 +36,20 @@ type JobRun = {
   error: string | null;
 };
 
+type AiUsage = {
+  month: string;
+  key_configured: boolean;
+  budget_usd: number;
+  spent_usd: number;
+  reserved_usd: number;
+  pending_batches: number;
+  components: { component: string; label_nl: string; model: string; prompt_version: string; batch: boolean;
+    regenerate_shift_points: number }[];
+  calls: { component: string; model: string; calls: number; passed: number; batch: number; cost: number;
+    input_tokens: number; output_tokens: number; cache_read_tokens: number }[];
+  explanations: { model: number; template_after_check: number };
+};
+
 type Jobs = { jobs: { name: string; label_nl: string; next_run: string | null }[]; runs: JobRun[] };
 
 type Coverage = {
@@ -47,10 +61,11 @@ type Coverage = {
 const TRIGGER_LABELS: Record<string, string> = { schedule: "planning", manual: "handmatig", cli: "opdrachtregel" };
 
 export default async function UsagePage() {
-  const [usage, jobs, coverage] = await Promise.all([
+  const [usage, jobs, coverage, ai] = await Promise.all([
     fetchServer<{ month: string; providers: ProviderUsage[] }>("/api/usage"),
     fetchServer<Jobs>("/api/jobs"),
     fetchServer<Coverage>("/api/data/coverage"),
+    fetchServer<AiUsage>("/api/ai/usage"),
   ]);
   if (!usage || !jobs || !coverage) {
     return <p className="notice">De rekenserver is niet bereikbaar. Controleer of alle containers draaien.</p>;
@@ -60,12 +75,15 @@ export default async function UsagePage() {
   return (
     <section className="stack">
       <div>
-        <h1>Bronnen en verbruik</h1>
+        <h1>Instellingen en verbruik</h1>
         <p className="lead">
-          Hoeveel aanroepen de app deze maand ({usage.month}) per databron deed, de nachtelijke taken en hoeveel
-          data er is. De interface haalt zelf nooit data bij een bron; alles loopt via de rekenserver.
+          Hoeveel aanroepen de app deze maand ({usage.month}) per databron en per taalmodel deed, de nachtelijke
+          taken en hoeveel data er is. De interface haalt zelf nooit data bij een bron; alles loopt via de
+          rekenserver. Instellingen staan in de configuratiebestanden op de server.
         </p>
       </div>
+
+      {ai && <AiCard ai={ai} />}
 
       <div className="card">
         <h2 className="card-title">Aanroepen per bron</h2>
@@ -202,6 +220,71 @@ export default async function UsagePage() {
         )}
       </div>
     </section>
+  );
+}
+
+const usd = new Intl.NumberFormat("nl-NL", { style: "currency", currency: "USD", maximumFractionDigits: 4 });
+
+function AiCard({ ai }: { ai: AiUsage }) {
+  const used = ai.spent_usd + ai.reserved_usd;
+  const pct = Math.min(100, Math.round((used / ai.budget_usd) * 100));
+  return (
+    <div className="card">
+      <h2 className="card-title">Taalmodel</h2>
+      <div className="stats">
+        <Stat label="API-sleutel" value={ai.key_configured ? "ingesteld" : "niet ingesteld"}
+          hint={ai.key_configured ? "toelichtingen 's nachts via de batch-API" : "de app toont de sjabloontekst"} />
+        <Stat label={`Verbruik ${ai.month}`} value={`${usd.format(ai.spent_usd)} van ${usd.format(ai.budget_usd)}`}
+          hint={ai.pending_batches ? `plus ${usd.format(ai.reserved_usd)} gereserveerd voor ${ai.pending_batches} lopende batch(es)` : "harde stop bij het maandbudget"} />
+        <Stat label="Toelichtingen" value={`${formatNumber(ai.explanations.model)} door taalmodel`}
+          hint={`${formatNumber(ai.explanations.template_after_check)} sjabloontekst na afgekeurde getalcontrole`} />
+      </div>
+      <div className="card-foot">
+        <span className="budget" title={`${pct}% van het maandbudget`}>
+          <span className="budget-bar"><span style={{ width: `${pct}%` }} className={pct > 80 ? "hot" : undefined} /></span>
+          <span className="muted">{pct}% van het maandbudget</span>
+        </span>
+      </div>
+      <div className="table-wrap">
+        <table className="ranking">
+          <thead>
+            <tr>
+              <th scope="col">Onderdeel</th>
+              <th scope="col">Model</th>
+              <th scope="col">Promptversie</th>
+              <th scope="col" className="num">Aanroepen</th>
+              <th scope="col" className="num">Goedgekeurd</th>
+              <th scope="col" className="num">Tokens in / uit</th>
+              <th scope="col" className="num">Kosten</th>
+            </tr>
+          </thead>
+          <tbody>
+            {ai.components.map((c) => {
+              const calls = ai.calls.filter((x) => x.component === c.component);
+              const sum = (k: "calls" | "passed" | "input_tokens" | "output_tokens" | "cost") =>
+                calls.reduce((t, x) => t + x[k], 0);
+              return (
+                <tr key={c.component}>
+                  <td>{c.label_nl}</td>
+                  <td>{c.model}</td>
+                  <td className="muted">{c.prompt_version}</td>
+                  <td className="num">{formatNumber(sum("calls"))}</td>
+                  <td className="num">{formatNumber(sum("passed"))}</td>
+                  <td className="num">{formatNumber(sum("input_tokens"))} / {formatNumber(sum("output_tokens"))}</td>
+                  <td className="num">{usd.format(sum("cost"))}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <p className="card-foot muted">
+        Een taalmodel schrijft alleen de toelichting en levert nooit cijfers of grades. Elk getal in de tekst wordt
+        gecontroleerd tegen de berekende cijfers; bij een afwijking volgt één nieuwe poging en daarna de vaste
+        sjabloontekst. Een toelichting wordt alleen opnieuw geschreven als de grade verandert of een pijler meer dan{" "}
+        {ai.components[0]?.regenerate_shift_points ?? 5} punten verschuift.
+      </p>
+    </div>
   );
 }
 

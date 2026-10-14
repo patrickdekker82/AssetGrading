@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from sqlalchemy import select, text
 from sqlalchemy.dialects.postgresql import insert
 
+from app.ai.explanation import Snapshot, shown_explanation
 from app.charting.indicators import (
     COMMODITY_DEFAULT_ON,
     COMMODITY_INDICATORS,
@@ -32,7 +33,6 @@ from app.charting.indicators import (
     to_points,
 )
 from app.grading.crypto import grade_crypto
-from app.grading.explain import explain
 from app.ingest.crypto import ingest_single
 from app.models import Asset, WatchlistItem
 from app.providers import ProviderError
@@ -136,8 +136,13 @@ def asset_detail(key: str, request: Request) -> dict:
     }
     out["pillars"] = pillars
     out["gates"] = res.get("gates", [])
-    out["explanation"] = explain(asset.name, res, config, _labels(request))
-    out["explanation_source"] = "sjabloon"
+    snapshot = Snapshot(asset.id, asset.name, snap["as_of"], snap["model_version_id"], res, snap["status"],
+                        snap["letter"], snap["score"], snap["peg_safety"])
+    with jobs.sf() as session:
+        shown = shown_explanation(session, request.app.state.ai_config, config, snapshot, _labels(request))
+    out["explanation"] = shown["text"]
+    out["explanation_source"] = shown["source"]
+    out["explanation_meta"] = {k: v for k, v in shown.items() if k not in ("text", "source")}
     return out
 
 

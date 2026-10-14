@@ -145,6 +145,19 @@ jaarcijfers en krijgen daarom geen grade, alleen koersen en een technische score
   geen aantal aandelen geeft (Visa, Berkshire Hathaway) kan dat met `set-fact v shares_outstanding <aantal>`.
   Zo'n waarde telt mee vanaf het moment van invullen, nooit met terugwerkende kracht.
 
+### Toelichtingen door een taalmodel (optioneel)
+
+Zonder `ANTHROPIC_API_KEY` in `.env` toont elke assetpagina de vaste sjabloontekst; de app werkt dan
+volledig. Met een sleutel schrijft een goedkoop model (`claude-haiku-5-5`, in te stellen in
+`config/ai.yaml`) 's nachts via de batch-API een toelichting per asset. Elk getal en elke grade in die
+tekst wordt gecontroleerd tegen de berekende cijfers; bij een afwijking volgt één nieuwe poging, daarna
+blijft de sjabloontekst staan. Een toelichting wordt alleen opnieuw geschreven als de grade verandert of
+een pijler meer dan 5 punten verschuift. Het maandbudget (standaard 5 dollar) is een harde stop; het
+verbruik staat onder Instellingen.
+
+- **Eén toelichting nu schrijven:** `docker compose exec server python -m app.cli explain bitcoin`.
+- **Alle opgeslagen toelichtingen opnieuw controleren:** `docker compose exec server python -m app.cli check-explanations`.
+
 ### Marktregime
 
 Elke week bepaalt de rekenserver het marktregime (risico aan, neutraal of risico uit) uit drie invoeren:
@@ -198,8 +211,8 @@ De app wordt in elf fases gebouwd (zie `CHANGELOG.md`). Na elke fase volgt een a
 | 3 | Interface en grafiek | Klaar |
 | 4 | Aandelen | Klaar |
 | 5 | ETF's, obligaties, indices en marktregime | Klaar |
-| 6 | Grondstoffen en valuta | Klaar, wacht op akkoord |
-| 7 | Toelichting, volglijst en bronnen | |
+| 6 | Grondstoffen en valuta | Klaar |
+| 7 | Toelichting, volglijst en bronnen | Klaar, wacht op akkoord |
 | 8 | Uitkomsten, terugtest en pagina Model | |
 | 9 | Leerlus | |
 | 10 | Afronding | |

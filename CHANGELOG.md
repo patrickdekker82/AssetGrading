@@ -1,5 +1,44 @@
 # Changelog
 
+## Fase 7 – Toelichting, volglijst en bronnen (2026-10-14)
+
+### Gebouwd
+
+- **Toelichting door een taalmodel** (hoofdstuk 9): de server stuurt per asset een JSON met de berekende
+  grade, pijlers, maatstaven, gates en drempels naar de Claude API en krijgt Nederlandse tekst plus de
+  gebruikte maatstaven terug, als JSON volgens een schema. De stopreden wordt gecontroleerd (een afgebroken
+  of geweigerd antwoord telt als afgekeurd).
+- **Getalcontrole**: elk getal in de tekst (in cijfers, Nederlandse of Engelse notatie, of in woorden) en
+  elke grade moet in de invoer staan; daarnaast lengte (110–220 woorden), bekende maatstaven en geen
+  woorden als kopen, verkopen of koersdoel. Bij een afwijking één nieuwe poging met de reden erbij, daarna
+  de vaste sjabloontekst.
+- **Vastleggen**: elke aanroep in `llm_call` (append-only) met model, promptversie, hash van de invoer,
+  ruwe uitvoer, tokens en kosten. Toelichtingen in `explanation` (append-only); nooit stil overschreven.
+- **Batch en caching**: nachtelijke taak `explanations` (23:30 en 04:30 UTC) haalt klaargezette batches op
+  en stuurt nieuwe in via de Message Batches API (50% korting), met prompt caching voor de vaste instructie.
+- **Verversen**: alleen bij een andere grade of status, of een pijler (of score) die meer dan 5 punten
+  verschuift. Volglijst gaat voor.
+- **Kostenbudget**: maandbudget in `config/ai.yaml` met harde stop; lopende batches worden vooraf
+  gereserveerd op hun maximale kosten. Verbruik per onderdeel staat onder Instellingen (`/verbruik`;
+  `/instellingen` verwijst daarheen).
+- **Zonder API-sleutel** werkt alles: de taak meldt alleen dat de sjabloontekst blijft staan.
+- **Pagina Bronnen** (`/bronnen`) met de verplichte vermeldingen van CoinGecko, TradingView, FRED en
+  alternative.me, plus alle andere bronnen; link in de voetregel van elke pagina.
+- **Volglijst**: een gevolgde asset met een oudere grade (eenmalig opgehaald, niet in een lijst) blijft
+  zichtbaar, met de datum van die grade.
+- Sjabloontekst: de bandbreedte noemt nu de ingestelde gewichtsvariatie en het hoogste memecoin-cijfer uit
+  het sjabloon in plaats van vaste waarden.
+- Header past nu op telefoonbreedte (liep 105 pixels over de rand).
+
+### Acceptatie
+
+- 100 gegenereerde toelichtingen over alle 16 sjablonen (test met een nep-taalmodel dat bij een deel
+  verzonnen getallen, afgebroken JSON of een weigering teruggeeft): geen enkele opgeslagen tekst bevat een
+  getal of grade die niet in de invoer stond; elke afgekeurde tekst kreeg precies één nieuwe poging.
+- De sjabloontekst zelf komt op alle 309 actuele grades in de ontwikkeldatabase door dezelfde controle.
+- Zonder `ANTHROPIC_API_KEY` werken assetpagina, taak en verbruikspagina; getest.
+- Nog niet gedaan: een echte run tegen de Claude API, omdat er geen sleutel is ingesteld.
+
 ## Fase 6 – Grondstoffen en valuta (2026-10-14)
 
 ### Gebouwd

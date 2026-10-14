@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 // Required on every page (chapter 11).
 export const DISCLAIMER =
   "Deze app is een privéhulpmiddel voor onderzoek. Grades zijn een rangorde op basis van een model, " +
@@ -9,7 +11,8 @@ export function Footer({ modelVersion }: { modelVersion: string | null }) {
       <p>{DISCLAIMER}</p>
       <p className="muted">
         Modelversie {modelVersion ?? "onbekend"} · Grafieken door{" "}
-        <a href="https://www.tradingview.com/" target="_blank" rel="noreferrer">TradingView</a>
+        <a href="https://www.tradingview.com/" target="_blank" rel="noreferrer">TradingView</a> · Data van
+        CoinGecko, FRED en andere <Link href="/bronnen">bronnen</Link>
       </p>
     </footer>
   );

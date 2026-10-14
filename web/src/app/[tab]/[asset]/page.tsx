@@ -31,6 +31,8 @@ type Detail = {
   pillars?: Pillar[];
   gates?: Gate[];
   explanation?: string;
+  explanation_source?: "taalmodel" | "sjabloon";
+  explanation_meta?: { written_for: string; used_metrics: string[]; rejected?: boolean };
 };
 
 type Props = { params: Promise<{ tab: string; asset: string }> };
@@ -200,7 +202,7 @@ export default async function AssetPage({ params }: Props) {
         <section className="card prose">
           <h2 className="card-title">Toelichting</h2>
           <p>{d.explanation}</p>
-          <p className="muted small">Vaste sjabloontekst op basis van de berekende cijfers. Een uitgebreidere toelichting volgt in fase 7.</p>
+          <p className="muted small">{explanationNote(d)}</p>
         </section>
       )}
 
@@ -374,4 +376,16 @@ async function Related({ id, kind, score }: { id: string; kind: string; score: n
         eerstvolgende termijncontract.</p>
     </section>
   );
+}
+
+function explanationNote(d: Detail): string {
+  const meta = d.explanation_meta;
+  if (d.explanation_source === "taalmodel" && meta) {
+    return `Geschreven door een taalmodel bij de grade van ${meta.written_for}. Elk getal is gecontroleerd ` +
+      "tegen de berekende cijfers; de grade zelf komt altijd uit het model.";
+  }
+  if (meta?.rejected) {
+    return "Vaste sjabloontekst: de tekst van het taalmodel kwam niet door de getalcontrole.";
+  }
+  return "Vaste sjabloontekst op basis van de berekende cijfers.";
 }

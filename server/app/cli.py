@@ -12,6 +12,9 @@
                                           enter a fact no free source provides, e.g. unlock_90d 0.04,
                                           flag_unresolved_exploit 1 or, for a stock whose share count SEC
                                           does not give, shares_outstanding 1950000000 (source 'manual')
+    python -m app.cli explain <asset>     write the explanation of one asset now (direct call, needs
+                                          ANTHROPIC_API_KEY); the nightly job uses the batch API
+    python -m app.cli check-explanations  check every stored explanation against its input again
 """
 
 import sys
@@ -30,6 +33,9 @@ def main(argv: list[str]) -> int:
         if command == "check-config":
             config = load_model_config(model_dir)
             load_glossary(settings.config_dir / "glossary.nl.yaml")
+            from app.ai import load_ai_config
+
+            load_ai_config(settings.config_dir / "ai.yaml")
             print(f"OK: model {config.version}, {len(config.templates)} templates, hash {config.config_hash[:12]}")
         elif command == "lock-model":
             config = load_model_config(model_dir, check_lock=False)
@@ -45,6 +51,10 @@ def main(argv: list[str]) -> int:
             return _verify(int(argv[1]) if len(argv) > 1 else None)
         elif command == "set-fact":
             return _set_fact(*argv[1:4])
+        elif command == "explain":
+            return _explain(argv[1] if len(argv) > 1 else "")
+        elif command == "check-explanations":
+            return _check_explanations()
         else:
             print(f"unknown command: {command}", file=sys.stderr)
             return 2
@@ -88,9 +98,14 @@ def _run_job(name: str) -> int:
     from app.stocks_config import load_stocks_config
 
     stocks = load_stocks_config(settings.config_dir / "stocks.yaml")
+    from app.ai import load_ai_config, make_client
+
+    ai = load_ai_config(settings.config_dir / "ai.yaml")
+    labels = {k: v.label for k, v in load_glossary(settings.config_dir / "glossary.nl.yaml").metrics.items()}
     ctx = JobContext(engine, sf, Providers(cfg, DbRecorder(sf)), cfg, universes, model, version_id, stocks=stocks,
                      markets=load_markets_config(settings.config_dir),
-                     commodities=load_commodities_config(settings.config_dir))
+                     commodities=load_commodities_config(settings.config_dir),
+                     ai=ai, labels=labels, llm_client=make_client(ai))
     run = run_job(ctx, name, trigger="cli")
     print(json.dumps({"status": run.status, "summary": run.summary, "error": run.error}, indent=2, default=str))
     return 0 if run.status in ("ok", "partial", "skipped") else 1
@@ -197,6 +212,56 @@ def _set_fact(coingecko_id: str, field: str, value: str) -> int:
         session.commit()
     print(f"{coingecko_id}: {field} = {value} (handmatig, bekend vanaf {now:%Y-%m-%d %H:%M} UTC)")
     return 0
+
+
+
+def _explainer():
+    from app.ai import load_ai_config, make_client
+    from app.ai.explanation import Explainer
+
+    settings, sf, config, version_id = _context()
+    ai = load_ai_config(settings.config_dir / "ai.yaml")
+    labels = {k: v.label for k, v in load_glossary(settings.config_dir / "glossary.nl.yaml").metrics.items()}
+    return Explainer(sf, ai, config, version_id, labels, make_client(ai))
+
+
+def _explain(slug: str) -> int:
+    import json
+
+    from sqlalchemy import text
+
+    explainer = _explainer()
+    with explainer.sf() as session:
+        asset_id = session.execute(text("SELECT id FROM asset WHERE slug = :s"), {"s": slug}).scalar()
+    if asset_id is None:
+        print(f"unknown asset: {slug}", file=sys.stderr)
+        return 2
+    report = explainer.explain_now(asset_id)
+    print(json.dumps(report.as_dict(), indent=2, ensure_ascii=False))
+    return 1 if report.errors else 0
+
+
+def _check_explanations() -> int:
+    """Every stored text, model or template, against the input rebuilt from its snapshot."""
+    from sqlalchemy import text
+
+    from app.ai.explanation import snapshot_on
+    from app.ai.numbers import check_text
+
+    explainer = _explainer()
+    checked = failed = 0
+    with explainer.sf() as session:
+        rows = session.execute(text(
+            "SELECT asset_id, model_version_id, snapshot_as_of, source, text FROM explanation ORDER BY id")).all()
+        for row in rows:
+            snap = snapshot_on(session, row.model_version_id, row.asset_id, row.snapshot_as_of)
+            problems = check_text(row.text, explainer.payload(snap))
+            checked += 1
+            if problems:
+                failed += 1
+                print(f"{snap.name} ({row.source}, {row.snapshot_as_of}): {'; '.join(problems)}")
+    print(f"{checked} toelichtingen gecontroleerd, {failed} met een getal of grade buiten de invoer")
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":

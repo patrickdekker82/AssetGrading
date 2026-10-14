@@ -12,6 +12,7 @@ from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy import Engine, text
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.ai.config import AiConfig
 from app.commodities_config import CommoditiesConfig
 from app.grading.commodities import grade_commodities
 from app.grading.crypto import grade_crypto
@@ -49,6 +50,9 @@ class JobContext:
     stocks: StocksConfig | None = None
     markets: MarketsConfig | None = None
     commodities: CommoditiesConfig | None = None
+    ai: AiConfig | None = None
+    labels: dict[str, str] | None = None     # metric labels from the glossary, for explanations
+    llm_client: object | None = None         # None without an API key: template text only
 
 
 def run_crypto_and_grade(c: JobContext) -> Report:
@@ -146,6 +150,17 @@ def run_commodities_and_grade(c: JobContext) -> Report:
     return report
 
 
+def run_explanations(c: JobContext) -> Report:
+    """Collect finished explanation batches and submit new ones (chapter 9)."""
+    if c.model is None or c.model_version_id is None or c.ai is None:
+        report = Report()
+        report.error("Geen model- of AI-configuratie geladen.")
+        return report
+    from app.ai.explanation import Explainer
+
+    return Explainer(c.sf, c.ai, c.model, c.model_version_id, c.labels or {}, c.llm_client).run()
+
+
 def last_trading_day(now: datetime) -> date:
     """The last weekday whose US session has closed (21:00 UTC covers both summer and winter time)."""
     day = now.date() if now.hour >= 21 else now.date() - timedelta(days=1)
@@ -160,6 +175,7 @@ JOBS: dict[str, Callable[[JobContext], Report]] = {
     "markets": run_markets_and_grade,
     "commodities": run_commodities_and_grade,
     "fx_macro": lambda c: run_fx_macro(c.sf, c.providers, c.cfg),
+    "explanations": run_explanations,
     "prune_raw": lambda c: run_prune(c.sf, c.cfg),
 }
 
@@ -169,6 +185,7 @@ JOB_LABELS_NL = {
     "markets": "Indices, ETF's, obligaties en marktregime",
     "commodities": "Grondstoffen, ETC's en valuta",
     "fx_macro": "Wisselkoersen en macro",
+    "explanations": "Toelichtingen (taalmodel, batch)",
     "prune_raw": "Opruimen ruwe antwoorden",
 }
 
@@ -247,8 +264,7 @@ def _execute(ctx: JobContext, name: str, trigger: str) -> JobRun:
 
 def schedule_jobs(scheduler: BaseScheduler, ctx: JobContext) -> None:
     mapping = {"crypto": ["crypto"], "stocks": ["stocks"], "markets": ["markets"], "commodities": ["commodities"],
-               "fx_macro": ["fx_macro"],
-               "prune_raw": ["prune_raw"]}
+               "fx_macro": ["fx_macro"], "explanations": ["explanations"], "prune_raw": ["prune_raw"]}
     for key, expr in ctx.cfg.schedule.items():
         for job in mapping.get(key, []):
             scheduler.add_job(

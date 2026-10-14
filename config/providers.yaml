@@ -207,3 +207,5 @@ schedule:                            # UTC
   markets: "45 21 * * mon-fri"       # indices, ETFs and the regime, before the stock run uses the regime
   commodities: "0 22 * * mon-fri"    # US futures settle by 19:30 UTC; ECB rates are out since 16:00 CET
   stocks: "30 22 * * mon-fri"        # well after the US close (16:00 New York = 20:00 or 21:00 UTC)
+  # Submit explanation batches after the evening runs and collect them (and crypto's) in the morning.
+  explanations: "30 4,23 * * *"

@@ -1,0 +1,66 @@
+# The Bronnen page (chapter 4). `required` marks the attributions the data licences ask for.
+# Licences of nearly every source cover personal use only: the app has no way to share data or grades.
+sources:
+  - name: CoinGecko
+    url: https://www.coingecko.com/
+    attribution: Data van CoinGecko
+    required: true
+    used_for: Cryptolijst, marktwaarde, volledig verwaterde waarde en koershistorie
+  - name: TradingView
+    url: https://www.tradingview.com/
+    attribution: Grafieken door TradingView (Lightweight Charts)
+    required: true
+    used_for: De koersgrafiek op elke assetpagina
+  - name: FRED
+    url: https://fred.stlouisfed.org/
+    attribution: "Bron: FRED, Federal Reserve Bank of St. Louis"
+    required: true
+    used_for: Rentes, reële rente, dollarindex, kredietspreads en andere macroreeksen
+    note: This product uses the FRED® API but is not endorsed or certified by the Federal Reserve Bank of St. Louis.
+  - name: alternative.me
+    url: https://alternative.me/crypto/fear-and-greed-index/
+    attribution: Crypto Fear & Greed Index van alternative.me
+    required: true
+    used_for: Verplichte vermelding volgens de bouwopdracht; de app haalt er op dit moment geen data op
+  - name: Binance, Coinbase, Bitvavo, Bybit, OKX
+    url: https://www.binance.com/
+    used_for: Dagkoersen, volume, orderboeken en financieringsrente van crypto
+  - name: DefiLlama
+    url: https://defillama.com/
+    used_for: TVL, protocolinkomsten en stablecoinvoorraad
+  - name: Coin Metrics Community
+    url: https://coinmetrics.io/community-network-data/
+    used_for: On-chainreeksen zoals MVRV en gerealiseerde waarde
+  - name: DEX Screener en RugCheck
+    url: https://dexscreener.com/
+    used_for: Liquiditeit en veiligheidscontrole van memecoins
+  - name: SEC EDGAR
+    url: https://www.sec.gov/search-filings/edgar-application-programming-interfaces
+    used_for: Jaar- en kwartaalcijfers van Amerikaanse aandelen
+  - name: Yahoo Finance
+    url: https://finance.yahoo.com/
+    used_for: Koersen van aandelen, ETF's, indices en futures (onofficieel, alleen dagkoersen)
+  - name: Tiingo en EODHD
+    url: https://www.tiingo.com/
+    used_for: Reservebron voor aandelenkoersen (alleen met eigen API-sleutel)
+  - name: OpenFIGI
+    url: https://www.openfigi.com/
+    used_for: Opzoeken van ISIN's
+  - name: Europese Centrale Bank
+    url: https://data.ecb.europa.eu/
+    used_for: Euro-referentiekoersen en Europese rentes
+  - name: Frankfurter
+    url: https://frankfurter.dev/
+    used_for: Wisselkoersen (ECB-referentiekoersen)
+  - name: CFTC
+    url: https://publicreporting.cftc.gov/
+    used_for: Posities van speculanten in futures (Commitments of Traders)
+  - name: EIA
+    url: https://www.eia.gov/opendata/
+    used_for: Voorraden van ruwe olie, benzine en aardgas
+  - name: Wereldbank
+    url: https://data.worldbank.org/
+    used_for: Inflatie en reële effectieve wisselkoersen
+  - name: Anthropic Claude
+    url: https://www.anthropic.com/
+    used_for: Toelichtingen in gewone taal (alleen met eigen API-sleutel); levert nooit cijfers of grades
