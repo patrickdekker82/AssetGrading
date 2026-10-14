@@ -154,6 +154,9 @@ class Template(Strict):
     peg_safety: PegSafety | None = None
     weight_rules: list[WeightRule] = []
     own_history: dict[str, float] | None = None
+    # Metrics compared with their own history even when the template compares assets with each other
+    # (macro series that are the same for every asset in the group, such as the dollar index).
+    own_history_metrics: list[str] = []
     excluded_metrics: list[str] = []
     show_btc_relative: bool = False
     show_underlying_timing: bool = False

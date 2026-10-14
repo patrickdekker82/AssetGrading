@@ -156,8 +156,14 @@ export function RankingTable({ tab, views }: { tab: string; views: View[] }) {
                     <Link href={href} className="name-cell row-link">
                       <span>{r.name}</span>
                       <span className="muted small">
-                        {r.template}{r.sector ? ` · ${r.sector}` : ""}{r.country ? ` · ${r.country}` : ""}
+                        {r.product ? "Productoordeel" : r.template}{r.sector ? ` · ${r.sector}` : ""}
+                        {r.country ? ` · ${r.country}` : ""}
                       </span>
+                      {r.asset_class === "commodity" && (
+                        <span className="muted small">
+                          Product: {r.best_product ? `${r.best_product.name} (${r.best_product.letter ?? "–"})` : "geen gevolgd"}
+                        </span>
+                      )}
                     </Link>
                   </td>
                   <td>{r.ticker}</td>

@@ -5,6 +5,8 @@ grading: weighted
 assign_on: product_type
 peer_group: commodity_class
 regime_adjust: false
+# The dollar and the real rate are the same for every commodity: they are scored against their own history.
+own_history_metrics: [dollar_index, real_rate]
 note_nl: >-
   Een particulier kan geen spot-grondstof aanhouden; daarom twee oordelen: de grondstof zelf
   en het product (ETC). Seizoenspatronen staan alleen in de grafiek.

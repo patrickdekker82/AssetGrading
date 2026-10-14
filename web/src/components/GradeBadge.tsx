@@ -32,6 +32,9 @@ export type GradeRow = {
   country?: string | null;
   market_cap_eur?: number | null;
   lists?: string[];
+  direction?: string | null;
+  product?: boolean;
+  best_product?: { id: string; name: string; letter: string | null; score: number | null } | null;
 };
 
 function tone(letter: string): string {

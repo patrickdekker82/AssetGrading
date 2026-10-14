@@ -1,0 +1,48 @@
+# Commodities (chapter 2: "circa 20") and currency pairs (chapter 2: "circa 15").
+#
+# Commodities: prices of the front futures contract (Yahoo `=F`) for the chart, the futures curve from the
+# next listed contracts (Yahoo `<root><month><yy>.<exchange>`), speculator positions from the CFTC
+# (disaggregated report, managed money) and, for energy, inventories from the EIA (needs EIA_API_KEY).
+# The trend is measured on the product (ETC) where one is followed: an ETC is a roll-adjusted series, the
+# front contract is not. `months`: futures month codes that are listed (F=Jan ... Z=Dec).
+commodities:
+  - {slug: gold, name: Goud, template: precious_metal, class: Edelmetalen, front: "GC=F", root: GC, exchange: CMX, months: GJMQVZ, cftc: "088691"}
+  - {slug: silver, name: Zilver, template: precious_metal, class: Edelmetalen, front: "SI=F", root: SI, exchange: CMX, months: HKNUZ, cftc: "084691"}
+  - {slug: platinum, name: Platina, template: precious_metal, class: Edelmetalen, front: "PL=F", root: PL, exchange: NYM, months: FJNV, cftc: "076651"}
+  - {slug: palladium, name: Palladium, template: precious_metal, class: Edelmetalen, front: "PA=F", root: PA, exchange: NYM, months: HMUZ, cftc: "075651"}
+  - {slug: wti, name: Ruwe olie (WTI), template: commodity, class: Energie, front: "CL=F", root: CL, exchange: NYM, months: FGHJKMNQUVXZ, cftc: "067651", eia: crude}
+  - {slug: brent, name: Ruwe olie (Brent), template: commodity, class: Energie, front: "BZ=F", root: BZ, exchange: NYM, months: FGHJKMNQUVXZ, eia: crude}
+  - {slug: natural-gas, name: Aardgas (Henry Hub), template: commodity, class: Energie, front: "NG=F", root: NG, exchange: NYM, months: FGHJKMNQUVXZ, cftc: "023651", eia: natural_gas}
+  - {slug: gasoline, name: Benzine (RBOB), template: commodity, class: Energie, front: "RB=F", root: RB, exchange: NYM, months: FGHJKMNQUVXZ, cftc: "111659", eia: gasoline}
+  - {slug: heating-oil, name: Stookolie, template: commodity, class: Energie, front: "HO=F", root: HO, exchange: NYM, months: FGHJKMNQUVXZ, cftc: "022651", eia: distillate}
+  - {slug: copper, name: Koper, template: commodity, class: Industriemetalen, front: "HG=F", root: HG, exchange: CMX, months: FGHJKMNQUVXZ, cftc: "085692"}
+  - {slug: aluminium, name: Aluminium, template: commodity, class: Industriemetalen, front: "ALI=F", root: ALI, exchange: CMX, months: FGHJKMNQUVXZ}
+  - {slug: corn, name: Maïs, template: commodity, class: Landbouw, front: "ZC=F", root: ZC, exchange: CBT, months: HKNUZ, cftc: "002602"}
+  - {slug: wheat, name: Tarwe, template: commodity, class: Landbouw, front: "ZW=F", root: ZW, exchange: CBT, months: HKNUZ, cftc: "001602"}
+  - {slug: soybeans, name: Sojabonen, template: commodity, class: Landbouw, front: "ZS=F", root: ZS, exchange: CBT, months: FHKNQUX, cftc: "005602"}
+  - {slug: coffee, name: Koffie, template: commodity, class: Landbouw, front: "KC=F", root: KC, exchange: NYB, months: HKNUZ, cftc: "083731"}
+  - {slug: sugar, name: Suiker, template: commodity, class: Landbouw, front: "SB=F", root: SB, exchange: NYB, months: HKNV, cftc: "080732"}
+  - {slug: cocoa, name: Cacao, template: commodity, class: Landbouw, front: "CC=F", root: CC, exchange: NYB, months: HKNUZ, cftc: "073732"}
+  - {slug: cotton, name: Katoen, template: commodity, class: Landbouw, front: "CT=F", root: CT, exchange: NYB, months: HKNVZ, cftc: "033661"}
+  - {slug: live-cattle, name: Levend vee, template: commodity, class: Vee, front: "LE=F", root: LE, exchange: CME, months: GJMQVZ, cftc: "057642"}
+  - {slug: lean-hogs, name: Varkens, template: commodity, class: Vee, front: "HE=F", root: HE, exchange: CME, months: GJKMNQVZ, cftc: "054642"}
+history_start: "2005-01-01"
+
+# Currency pairs: long the first currency, short the second. Every pair is also followed the other way
+# round (USD/EUR next to EUR/USD); the two are each other's mirror image.
+fx_pairs: [EUR/USD, EUR/GBP, EUR/JPY, EUR/CHF, EUR/SEK, EUR/NOK, EUR/AUD, EUR/CAD, EUR/CNY,
+           GBP/USD, USD/JPY, USD/CHF, AUD/USD, USD/CAD, USD/CNY]
+# Per currency: short-term interest rate (FRED series, in order of preference; the first one with a value in
+# the last 120 days is used), real effective exchange rate (BIS via FRED), World Bank country code, CFTC
+# code of the futures contract against the dollar (Traders in Financial Futures report).
+currencies:
+  EUR: {rates: [ECBESTRVOLWGTTRMDMNRT, IR3TIB01EZM156N], reer: RBXMBIS, worldbank: EMU, cftc: "099741"}
+  USD: {rates: [SOFR, IR3TIB01USM156N], reer: RBUSBIS, worldbank: USA}
+  GBP: {rates: [IUDSOIA, IR3TIB01GBM156N], reer: RBGBBIS, worldbank: GBR, cftc: "096742"}
+  JPY: {rates: [IR3TIB01JPM156N], reer: RBJPBIS, worldbank: JPN, cftc: "097741"}
+  CHF: {rates: [IR3TIB01CHM156N], reer: RBCHBIS, worldbank: CHE, cftc: "092741"}
+  SEK: {rates: [IR3TIB01SEM156N], reer: RBSEBIS, worldbank: SWE}
+  NOK: {rates: [IR3TIB01NOM156N], reer: RBNOBIS, worldbank: NOR}
+  AUD: {rates: [IR3TIB01AUM156N], reer: RBAUBIS, worldbank: AUS, cftc: "232741"}
+  CAD: {rates: [IR3TIB01CAM156N], reer: RBCABIS, worldbank: CAN, cftc: "090741"}
+  CNY: {rates: [IR3TIB01CNM156N], reer: RBCNBIS, worldbank: CHN, managed: true}

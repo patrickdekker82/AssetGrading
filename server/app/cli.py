@@ -2,8 +2,9 @@
 
     python -m app.cli check-config        validate configuration
     python -m app.cli lock-model          register a new model version
-    python -m app.cli run <job>           run a job now (crypto, stocks, markets, fx_macro, prune_raw)
-    python -m app.cli grade [YYYY-MM-DD] [crypto|stocks|markets]
+    python -m app.cli run <job>           run a job now (crypto, stocks, markets, commodities, fx_macro,
+                                          prune_raw)
+    python -m app.cli grade [YYYY-MM-DD] [crypto|stocks|markets|commodities]
                                           grade a day (default: yesterday, both classes)
     python -m app.cli regime              store the market regime for every day not stored yet
     python -m app.cli verify [N]          recompute the latest N snapshots (default: all) and compare
@@ -82,12 +83,14 @@ def _run_job(name: str) -> int:
 
     with sf() as session:
         version_id = register_model_version(session, model).id
+    from app.commodities_config import load_commodities_config
     from app.markets_config import load_markets_config
     from app.stocks_config import load_stocks_config
 
     stocks = load_stocks_config(settings.config_dir / "stocks.yaml")
     ctx = JobContext(engine, sf, Providers(cfg, DbRecorder(sf)), cfg, universes, model, version_id, stocks=stocks,
-                     markets=load_markets_config(settings.config_dir))
+                     markets=load_markets_config(settings.config_dir),
+                     commodities=load_commodities_config(settings.config_dir))
     run = run_job(ctx, name, trigger="cli")
     print(json.dumps({"status": run.status, "summary": run.summary, "error": run.error}, indent=2, default=str))
     return 0 if run.status in ("ok", "partial", "skipped") else 1
@@ -133,6 +136,12 @@ def _grade(day: str | None, asset_class: str | None) -> int:
 
         report = grade_markets(sf, config, version_id, load_markets_config(settings.config_dir), as_of)
         print(json.dumps({"markets": report.as_dict()}, indent=2))
+    if asset_class in (None, "commodities"):
+        from app.commodities_config import load_commodities_config
+        from app.grading.commodities import grade_commodities
+
+        report = grade_commodities(sf, config, version_id, load_commodities_config(settings.config_dir), as_of)
+        print(json.dumps({"commodities": report.as_dict()}, indent=2))
     return 0
 
 

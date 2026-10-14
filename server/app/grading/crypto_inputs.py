@@ -293,8 +293,9 @@ def _bitcoin_metrics(m: Metrics, f: AssetFacts, data: CryptoData) -> None:
     for metric, sid, label in (("real_rate", "DFII10", "FRED DFII10"), ("dollar_index", "DTWEXBGS", "FRED DTWEXBGS")):
         s = data.macro.get(sid)
         if s is not None and not s.empty and (d - s.index[-1]).days <= 10:
-            m.set(metric, float(s.iloc[-1]), f"{label} {s.index[-1]}")
-            m.history[metric] = s
+            scale = 0.01 if metric == "real_rate" else 1.0     # FRED gives percent; the metric is a ratio
+            m.set(metric, float(s.iloc[-1]) * scale, f"{label} {s.index[-1]}")
+            m.history[metric] = s * scale
     supply = data.macro.get(STABLECOIN_SERIES)
     if supply is not None and len(supply) > 400:
         growth = (supply / supply.shift(30) - 1).dropna()

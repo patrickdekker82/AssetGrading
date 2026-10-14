@@ -111,6 +111,18 @@ def fake_markets(request: httpx.Request) -> httpx.Response:
         if isin == "US0000000AA1":
             return httpx.Response(200, json=[{"data": [{"ticker": "AAA", "exchCode": "US", "name": "AAA CORP"}]}])
         return httpx.Response(200, json=[{"warning": "No identifier found."}])
+    if host == "publicreporting.cftc.gov":
+        start = TODAY - timedelta(days=800)
+        rows = [{"report_date_as_yyyy_mm_dd": f"{d.isoformat()}T00:00:00.000", "m_money_positions_long_all": "100",
+                 "m_money_positions_short_all": str(40 + i % 30), "lev_money_positions_long": "50",
+                 "lev_money_positions_short": str(30 + i % 20), "open_interest_all": "1000"}
+                for i, d in enumerate(start + timedelta(weeks=w) for w in range(110)) if d <= TODAY]
+        return httpx.Response(200, json=rows)
+    if host == "api.worldbank.org":
+        codes = path.split("/country/")[1].split("/")[0].split(";")
+        rows = [{"countryiso3code": c, "date": str(y), "value": 1.0 + i + (y - 2020) * 0.1}
+                for i, c in enumerate(codes) if c != "EMU" for y in range(2018, TODAY.year)]
+        return httpx.Response(200, json=[{"page": 1}, rows])
     if host == "fc.yahoo.com":
         return httpx.Response(404, text="not found")
     if path == "/v1/test/getcrumb":

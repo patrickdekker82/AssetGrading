@@ -5,6 +5,7 @@ grading: weighted
 assign_on: product_type
 peer_group: commodity_class
 regime_adjust: false
+own_history_metrics: [real_rate_10y, dollar_index]
 note_nl: >-
   Het verband tussen goud en de reële rente is sinds 2022 verzwakt door aankopen van centrale banken.
   De goud-zilververhouding is alleen context.

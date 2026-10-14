@@ -68,6 +68,8 @@ Alles wat het model bepaalt staat in versiebeheerde YAML-bestanden, niet in code
 | `config/stocks.yaml` | Aandelen: hoe de VS-lijst wordt bepaald, de AEX-fondsen (met ISIN) en de koersbronnen |
 | `config/indices.yaml` | De indices, met valuta, rentecurve en (waar gevolgd) de aandelen voor marktbreedte |
 | `config/etfs.yaml` | ETF-groepen per index, obligatiecategorieën en de staatsrentes ter vergelijking |
+| `config/commodities.yaml` | Grondstoffen (termijncontracten, CFTC-code, EIA-reeks) en valutaparen met per valuta de rente, reële effectieve koers en CFTC-code |
+| `config/etcs.csv` | Zelf bijgehouden ETC's per grondstof: structuur, onderpand, kosten, met bron en datum |
 | `config/etfs.csv`, `config/bond_etfs.csv` | Zelf bijgehouden fondskenmerken (kosten, domicilie, replicatie, omvang; bij obligaties rendement, duration en ratings), met bron en datum per regel |
 | `config/providers.yaml` | Databronnen: adressen, snelheidslimieten, maandbudgetten, planning van de nachtelijke runs |
 | `config/glossary.nl.yaml` | De woordenlijst: elke tooltip in de interface komt hiervandaan |
@@ -96,6 +98,7 @@ De rekenserver haalt elke nacht zelf data op (tijden in UTC, instelbaar in `conf
 | --- | --- | --- |
 | Crypto | 00:05 | Top 50 van CoinGecko, dagkoersen (Coinbase → Binance → CoinGecko), marktwaarde, TVL en fees (DefiLlama), on-chain data (Coin Metrics) |
 | Markten | werkdagen 21:45 | Indices, ETF's en obligatie-ETF's (Yahoo), tien grootste posities (maandelijks), rentes (FRED, ECB), daarna het marktregime en de grades |
+| Grondstoffen en valuta | werkdagen 22:00 | Termijncontracten en ETC's (Yahoo), CFTC-posities, EIA-voorraden (met sleutel), Wereldbank, rentes en reële wisselkoersen (FRED), valutaparen uit de ECB-koersen, daarna de grades |
 | Aandelen | werkdagen 22:30 | Grootste SEC-registranten met een 10-K en de AEX-fondsen, dagkoersen (Tiingo → Yahoo; EODHD als je die afneemt), SEC-cijfers na elke nieuwe publicatie en minstens maandelijks, daarna de grades |
 | Wisselkoersen en macro | werkdagen 16:30 | ECB-referentiekoersen (Frankfurter) en rentes, VIX en dollarindex (FRED) |
 | Opruimen | 03:30 | Ruwe antwoorden ouder dan de bewaartermijn per bron |
@@ -113,6 +116,7 @@ Sleutels in `.env`:
 | `TIINGO_API_KEY` | Gratis sleutel van Tiingo (VS-koersen) | Koersen komen van Yahoo Finance (onofficieel, kan geblokkeerd raken) |
 | `SEC_USER_AGENT` | Verplicht voor SEC: een naam en **jouw** e-mailadres, bijvoorbeeld `"Graadmeter prive naam@voorbeeld.nl"` | SEC weigert de aanvragen |
 | `EODHD_API_KEY` | Betaald (EODHD), optioneel: Europese koersen | Europese koersen komen van Yahoo Finance |
+| `EIA_API_KEY` | Gratis sleutel van de EIA (Amerikaanse energiecijfers) | Geen voorraadcijfers voor olie en gas; de pijler Fundamentals blijft leeg |
 
 Zonder sleutel slaat de app die bron over en meldt dat; verder werkt alles door.
 
@@ -148,6 +152,14 @@ de wereldindex tegenover zijn 10-maandsgemiddelde, de renteopslag op high-yield-
 regime staat per dag in de tabel `market_regime`, met de drie invoeren erbij. Bij risico uit gaat de grade
 van aandelen en crypto één stapje omlaag (B wordt B-); gates blijven altijd gelden. De drempels staan in
 `config/model/model.yaml` onder `regime`. Op de tab Indices staat de huidige stand met de invoeren.
+
+### Grondstoffen en valuta
+
+Een grondstof krijgt twee oordelen: de grondstof zelf (termijncurve, trend, voorraden, macro, posities van
+speculanten) en het product waarmee je hem aanhoudt (een ETC: fysiek of via termijncontracten, onderpand,
+kosten, rolopbrengst). Een valutapaar krijgt een richtingsscore: lang de eerste en kort de tweede valuta.
+Elk paar staat er in beide richtingen; EUR/USD en USD/EUR zijn elkaars spiegelbeeld (de scores tellen op
+tot 100).
 
 ### ETF-kenmerken bijwerken
 
@@ -185,8 +197,8 @@ De app wordt in elf fases gebouwd (zie `CHANGELOG.md`). Na elke fase volgt een a
 | 2 | Grading-engine en crypto | Klaar |
 | 3 | Interface en grafiek | Klaar |
 | 4 | Aandelen | Klaar |
-| 5 | ETF's, obligaties, indices en marktregime | Klaar, wacht op akkoord |
-| 6 | Grondstoffen en valuta | |
+| 5 | ETF's, obligaties, indices en marktregime | Klaar |
+| 6 | Grondstoffen en valuta | Klaar, wacht op akkoord |
 | 7 | Toelichting, volglijst en bronnen | |
 | 8 | Uitkomsten, terugtest en pagina Model | |
 | 9 | Leerlus | |

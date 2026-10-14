@@ -186,7 +186,9 @@ def last_fact_date(session: Session, asset_id: int, source: str, field_prefix: s
 
 
 def insert_macro(session: Session, series_id: str, source: str, obs: Iterable[tuple[date, float, int | None]],
-                 fetched_at: datetime) -> int:
+                 fetched_at: datetime, release_lag: timedelta | None = None) -> int:
+    """`release_lag`: for series published some time after the date they describe (CFTC on Friday for
+    Tuesday, World Bank months after the year): a value never counts as known before date + lag."""
     obs = list(obs)
     if not obs:
         return 0
@@ -208,6 +210,8 @@ def insert_macro(session: Session, series_id: str, source: str, obs: Iterable[tu
             available_at = end_of_day(d)
         else:
             available_at = max(fetched_at, end_of_day(d))
+        if release_lag is not None:
+            available_at = max(available_at, datetime.combine(d, time.min, tzinfo=UTC) + release_lag)
         rows.append({"series_id": series_id, "date": d, "value": value, "source": source,
                      "available_at": available_at, "fetched_at": fetched_at, "call_id": call_id})
         latest[d] = value

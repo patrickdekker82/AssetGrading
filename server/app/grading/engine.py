@@ -39,13 +39,15 @@ class GradeInput:
     prev_letter: str | None = None          # last published letter before caps (hysteresis state)
     recent_raw: list[str] = field(default_factory=list)  # raw letters of previous days, oldest first
     regime: str | None = None               # market regime of the day (risk_on | neutral | risk_off)
+    product: bool = False                   # grade the product (ETC) with the template's product judgement
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "GradeInput":
         metrics = {k: MetricInput(**v) for k, v in data["metrics"].items()}
         return cls(template_id=data["template_id"], tags=list(data["tags"]), metrics=metrics,
                    flags=dict(data.get("flags", {})), prev_letter=data.get("prev_letter"),
-                   recent_raw=list(data.get("recent_raw", [])), regime=data.get("regime"))
+                   recent_raw=list(data.get("recent_raw", [])), regime=data.get("regime"),
+                   product=bool(data.get("product", False)))
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -117,6 +119,8 @@ class GradeResult:
 
 def grade(inp: GradeInput, config: ModelConfig) -> GradeResult:
     template = config.templates[inp.template_id]
+    if inp.product:
+        return _product(inp, template, config)
     if template.grading == "peg_safety":
         return _peg_safety(inp, template, config)
     if template.grading == "safety_only":
@@ -277,6 +281,8 @@ def _weighted(inp: GradeInput, template: Template, config: ModelConfig) -> Grade
     raw = letter_for(score, scale)
     held = apply_hysteresis(score, raw, inp.prev_letter, inp.recent_raw, scale, stab.hysteresis_points,
                             stab.hysteresis_days)
+    if template.flag_macro_price_divergence:
+        _macro_price_divergence(pillars, notes)
     notches = _regime_notches(inp, template, config)
     if notches:
         notes.append(f"Marktregime {REGIME_NL.get(inp.regime or '', inp.regime)}: grade {notches:+d} stap, "
@@ -304,6 +310,49 @@ def _weighted(inp: GradeInput, template: Template, config: ModelConfig) -> Grade
         labels.append(template.label_nl)
     return GradeResult(template.id, status, score, quality, timing, coverage, raw, held, letter, letter_low,
                        letter_high, low, high, None, labels, reason, pillars, gates, notes)
+
+
+def _macro_price_divergence(pillars: list[PillarResult], notes: list[str]) -> None:
+    """Precious metals: say so when macro and the price trend point opposite ways (chapter 6)."""
+    macro = next((p.score for p in pillars if p.id == "macro"), None)
+    trend = next((p.score for p in pillars if p.timing), None)
+    if macro is not None and trend is not None and (macro - 50) * (trend - 50) < 0 and abs(macro - trend) >= 30:
+        notes.append(f"Macro ({macro:.0f}) en koerstrend ({trend:.0f}) spreken elkaar tegen.")
+
+
+def _product(inp: GradeInput, template: Template, config: ModelConfig) -> GradeResult:
+    """Product judgement for an ETC (chapter 6): the template's product metrics, equally weighted, and the
+    product gates. The commodity itself is graded separately with the normal pillars."""
+    prod = template.product
+    if prod is None:
+        raise ValueError(f"template {template.id} has no product judgement")
+    metrics, total, available, weighted = [], 0.0, 0.0, 0.0
+    for metric_id in prod.metrics:
+        mi = inp.metrics.get(metric_id)
+        score = _metric_score(metric_id, mi, False, config)
+        metrics.append(MetricResult(id=metric_id, value=None if mi is None else mi.value, score=score, weight=1.0))
+        total += 1
+        if score is not None:
+            available, weighted = available + 1, weighted + score
+    coverage = available / total if total else 0.0
+    score = weighted / available if available else None
+    pillar = PillarResult(id="product", name_nl=prod.name_nl, weight=100, effective_weight=100.0 if score else 0.0,
+                          score=score, coverage=coverage, timing=False, metrics=metrics)
+    product_template = template.model_copy(update={"gates": prod.gates, "max_grade": None})
+    gates = _evaluate_gates(product_template, inp, [pillar])
+    status = _status(coverage, config) if score is not None else "no_grade"
+    if status == "no_grade":
+        return GradeResult(template.id, "no_grade", score, score, None, coverage, None, None, None, None, None,
+                           None, None, None, [], _no_grade_reason(coverage, [pillar], config), [pillar], gates, [])
+    raw = letter_for(score, config.settings.letter_scale)
+    held = apply_hysteresis(score, raw, inp.prev_letter, inp.recent_raw, config.settings.letter_scale,
+                            config.settings.stability.hysteresis_points, config.settings.stability.hysteresis_days)
+    letter, labels = _apply_gates(held, gates, product_template)
+    if status == "provisional":
+        labels.append("voorlopig")
+    notes = [prod.note_nl] if prod.note_nl else []
+    return GradeResult(template.id, status, score, score, None, coverage, raw, held, letter, letter, letter,
+                       score, score, None, labels, None, [pillar], gates, notes)
 
 
 REGIME_NL = {"risk_on": "risico aan", "neutral": "neutraal", "risk_off": "risico uit"}

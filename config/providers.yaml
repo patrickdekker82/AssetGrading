@@ -123,6 +123,22 @@ providers:
     rate_limit: {calls: 1, per_seconds: 2}
     monthly_budget: null
     raw_retention_days: 90
+  cftc:
+    base_url: https://publicreporting.cftc.gov
+    rate_limit: {calls: 2, per_seconds: 1}
+    monthly_budget: null
+    raw_retention_days: 90
+  eia:
+    base_url: https://api.eia.gov
+    api_key_env: EIA_API_KEY
+    rate_limit: {calls: 2, per_seconds: 1}
+    monthly_budget: null
+    raw_retention_days: 90
+  worldbank:
+    base_url: https://api.worldbank.org
+    rate_limit: {calls: 2, per_seconds: 1}
+    monthly_budget: null
+    raw_retention_days: 400
   openfigi:
     base_url: https://api.openfigi.com
     rate_limit: {calls: 20, per_seconds: 60}
@@ -189,4 +205,5 @@ schedule:                            # UTC
   fx_macro: "30 16 * * mon-fri"      # after the ECB reference rates (around 16:00 CET)
   prune_raw: "30 3 * * *"
   markets: "45 21 * * mon-fri"       # indices, ETFs and the regime, before the stock run uses the regime
+  commodities: "0 22 * * mon-fri"    # US futures settle by 19:30 UTC; ECB rates are out since 16:00 CET
   stocks: "30 22 * * mon-fri"        # well after the US close (16:00 New York = 20:00 or 21:00 UTC)

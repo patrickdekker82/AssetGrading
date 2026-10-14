@@ -11,14 +11,20 @@ from sqlalchemy import select, text
 from sqlalchemy.dialects.postgresql import insert
 
 from app.charting.indicators import (
+    COMMODITY_DEFAULT_ON,
+    COMMODITY_INDICATORS,
     CRYPTO_INDICATORS,
     DEFAULT_ON,
+    FX_DEFAULT_ON,
+    FX_INDICATORS,
     INDEX_DEFAULT_ON,
     INDEX_INDICATORS,
     STOCK_DEFAULT_ON,
     STOCK_INDICATORS,
     aggregate_ohlc,
+    commodity_indicators,
     daily_indicators,
+    fx_indicators,
     index_indicators,
     sample,
     sig,
@@ -112,7 +118,9 @@ def asset_detail(key: str, request: Request) -> dict:
                 "peer_pct": gi.get("peer_pct"), "own_pct": gi.get("own_pct"), "source": provenance.get(m["id"]),
                 "peer_group": peer.get("group"), "peer_count": len(peer.get("values") or []) or None,
             })
-        pillars.append({**p, "metrics": metrics})
+        cfg_pillar = next((x for x in template.pillars if x.id == p["id"]), None)
+        pillars.append({**p, "metrics": metrics,
+                        "horizon_months": cfg_pillar.horizon_months if cfg_pillar else None})
     out["asset"]["template"] = snap["template_id"]
     out["asset"]["template_name"] = template.name_nl
     out["snapshot"] = {
@@ -178,7 +186,7 @@ def _benchmark_for(session, asset: Asset) -> tuple[str | None, str | None]:
 def _build_chart(key: str, interval: str, jobs) -> dict:
     with jobs.sf() as session:
         asset = _asset(session, key)
-        stock = asset.asset_class in ("stock", "index", "etf", "bond", "reference")
+        stock = asset.asset_class in ("stock", "index", "etf", "bond", "reference", "commodity", "etc", "fx")
         conn = session.connection()
         # Stocks are charted in their own currency (adjusted for splits and dividends), crypto in euro.
         cols = ("open_eur AS open, high_eur AS high, low_eur AS low, close_eur AS close" if not stock else
@@ -206,6 +214,20 @@ def _build_chart(key: str, interval: str, jobs) -> dict:
             "SELECT date, state FROM market_regime WHERE model_version_id = :v ORDER BY date"),
             {"v": jobs.model_version_id}).all()
         macro = {}
+        cats = dict(str(c).split(":", 1) for c in asset.categories or [] if ":" in str(c))
+        cftc_code = cats.get("cftc")
+        if asset.asset_class == "fx" and jobs.commodities:
+            cur = jobs.commodities.currencies
+            base, quote = cats.get("base"), cats.get("quote")
+            sign, code = (1, cur[base].cftc) if base in cur and cur[base].cftc and quote == "USD" else \
+                (-1, cur[quote].cftc) if quote in cur and cur[quote].cftc and base == "USD" else (1, None)
+            cftc_code = code
+        if cftc_code:
+            rows = session.execute(text(
+                "SELECT DISTINCT ON (date) date, value FROM macro_observation WHERE series_id = :s "
+                "ORDER BY date, available_at DESC"), {"s": f"CFTC_{cftc_code}"}).all()
+            factor = sign if asset.asset_class == "fx" else 1
+            macro["cftc"] = pd.Series([float(r[1]) * factor for r in rows], index=[r[0] for r in rows], dtype=float)
         if asset.asset_class == "index":
             for sid in ("VIXCLS", "VXVCLS"):
                 rows = session.execute(text(
@@ -231,7 +253,12 @@ def _build_chart(key: str, interval: str, jobs) -> dict:
         df = df[df["source"] == best]
         return pd.Series(df["value"].to_numpy(dtype=float), index=list(df["as_of"]))
 
-    if asset.asset_class in ("index", "etf", "bond", "reference"):
+    if asset.asset_class in ("commodity", "etc"):
+        ind, defs, default_on = commodity_indicators(ohlc, macro.get("cftc")), COMMODITY_INDICATORS, \
+            COMMODITY_DEFAULT_ON
+    elif asset.asset_class == "fx":
+        ind, defs, default_on = fx_indicators(ohlc, macro.get("cftc")), FX_INDICATORS, FX_DEFAULT_ON
+    elif asset.asset_class in ("index", "etf", "bond", "reference"):
         breadth = None
         if asset.asset_class == "index":
             breadth = _breadth_for(jobs, asset)
@@ -277,7 +304,8 @@ def _build_chart(key: str, interval: str, jobs) -> dict:
                 "default_on": d.id in default_on} for d in defs]
     return {"interval": interval, "candles": candle_rows, "volume": volume, "indicators": indicators,
             "catalog": catalog, "benchmark": bench_points, "benchmark_name": bench_name if bench_points else None,
-            "markers": markers, "gate_zones": zones, "currency": currency, "adjusted": stock,
+            "markers": markers, "gate_zones": zones, "currency": currency,
+            "adjusted": asset.asset_class in ("stock", "etf", "bond", "index", "etc"),
             "regime_zones": _risk_off_zones(regime_rows, ohlc.index[0]),
             "tradingview_symbol": _tradingview_symbol(asset)}
 
@@ -538,3 +566,41 @@ def etf_peers(key: str, request: Request) -> dict:
     out.sort(key=lambda x: -(x["score"] or 0))
     group_name = jobs.markets.index_groups[group].name if jobs.markets and group in jobs.markets.index_groups else group
     return {"group": group_name, "rows": out}
+
+
+
+@router.get("/assets/{key}/products")
+def commodity_products(key: str, request: Request) -> dict:
+    """For a commodity: the products (ETCs) to hold it, with their product judgement. For an ETC or a currency
+    pair: the commodity it tracks, or the mirror pair."""
+    jobs = _ctx(request)
+    with jobs.sf() as session:
+        asset = _asset(session, key)
+        cats = dict(str(c).split(":", 1) for c in asset.categories or [] if ":" in str(c))
+        if asset.asset_class == "commodity":
+            where, params = "a.asset_class = 'etc' AND a.categories @> CAST(:cat AS jsonb)", \
+                {"cat": f'["commodity:{key}"]'}
+        elif asset.asset_class == "etc":
+            where, params = "a.slug = :s", {"s": cats.get("commodity", "")}
+        elif asset.asset_class == "fx":
+            where, params = "a.slug = :s", {"s": cats.get("mirror", "")}
+        else:
+            return {"rows": []}
+        rows = session.execute(text(
+            f"""
+            SELECT DISTINCT ON (a.id) a.slug, a.name, a.asset_class, a.categories, g.letter, g.status, g.score,
+                   g.inputs->'grade_input'->'metrics' AS metrics
+            FROM asset a JOIN grade_snapshot g ON g.asset_id = a.id AND g.model_version_id = :v
+            WHERE {where}
+            ORDER BY a.id, g.as_of DESC
+            """), {**params, "v": jobs.model_version_id}).mappings().all()
+    out = []
+    for r in rows:
+        m = {k: (v or {}).get("value") for k, v in (r["metrics"] or {}).items()}
+        c = dict(str(x).split(":", 1) for x in r["categories"] or [] if ":" in str(x))
+        out.append({"id": r["slug"], "name": r["name"], "asset_class": r["asset_class"], "letter": r["letter"],
+                    "status": r["status"], "score": r["score"], "structure": c.get("structure"),
+                    "collateralized": c.get("collateralized"), "ongoing_charges": m.get("ongoing_charges"),
+                    "roll_yield_12m": m.get("roll_yield_12m"), "tracking_difference": m.get("tracking_difference")})
+    out.sort(key=lambda x: -(x["score"] or 0))
+    return {"rows": out}

@@ -38,11 +38,12 @@ class Prepared:
     btc_relative: dict | None = None
     price_eur: float | None = None
     peer_key: str | None = None   # stocks: the sector, compared within the template
+    product: bool = False         # an ETC graded with its commodity template's product judgement
 
 
-def percentile_metric_ids(config: ModelConfig, template_id: str) -> list[str]:
+def percentile_metric_ids(config: ModelConfig, template_id: str, product: bool = False) -> list[str]:
     t = config.templates[template_id]
-    ids = [m.id for p in t.pillars for m in p.metrics]
+    ids = list(t.product.metrics) if product and t.product else [m.id for p in t.pillars for m in p.metrics]
     return [i for i in dict.fromkeys(ids) if config.metrics[i].scoring == "percentile"]
 
 
@@ -72,7 +73,8 @@ def peer_members(p: "Prepared", prepared: list["Prepared"], config: ModelConfig,
     """Members of the comparison group of `p`. Stocks compare within their sector (same template); a sector
     with fewer than `min_group_size` members falls back to all stocks with that template."""
     kind = config.templates[p.template_id].peer_group
-    if kind in ("sector", "bond_category", "same_index") and p.peer_key:
+    prepared = [q for q in prepared if q.product == p.product]   # products only compare with products
+    if kind in ("sector", "bond_category", "same_index", "commodity_class") and p.peer_key:
         sector = [q for q in prepared if q.template_id == p.template_id and q.peer_key == p.peer_key]
         if kind == "same_index" or len(sector) >= config.settings.peers.min_group_size:
             return f"{p.template_id}:{p.peer_key}", sector    # ETFs: only ever the same index
@@ -156,16 +158,17 @@ def build_inputs(prepared: list[Prepared], config: ModelConfig, as_of: date) -> 
             half_life = (template.own_history or {}).get("recency_half_life_years") if own_history else None
             group_name, members = peer_members(p, prepared, config, counts)
             valuation = valuation_metric_ids(config, p.template_id)
-            for metric_id in percentile_metric_ids(config, p.template_id):
+            for metric_id in percentile_metric_ids(config, p.template_id, p.product):
                 mi = metrics.get(metric_id)
                 if mi is None or mi.value is None:
                     continue
                 higher = config.metrics[metric_id].direction == "higher"
-                if own_history:
+                if own_history or metric_id in template.own_history_metrics:
                     hist = p.metrics.history.get(metric_id)
                     if hist is not None:
                         mi.peer_pct = _own_history_pct(mi.value, hist, as_of, years, higher, half_life)
-                    peers_used[metric_id] = {"group": "own_history", "half_life_years": half_life}
+                    peers_used[metric_id] = {"group": "own_history",
+                                             "half_life_years": half_life if own_history else None}
                     continue
                 values = [q.metrics.values[metric_id] for q in members if q.metrics.values.get(metric_id) is not None]
                 if len(values) >= min_peers(config, p.template_id):
@@ -174,7 +177,8 @@ def build_inputs(prepared: list[Prepared], config: ModelConfig, as_of: date) -> 
                 hist = p.metrics.history.get(metric_id)
                 if metric_id in valuation and hist is not None:
                     mi.own_pct = _own_history_pct(mi.value, hist, as_of, years, higher)
-        inp = GradeInput(template_id=p.template_id, tags=p.tags, metrics=metrics, flags=dict(p.metrics.flags))
+        inp = GradeInput(template_id=p.template_id, tags=p.tags, metrics=metrics, flags=dict(p.metrics.flags),
+                         product=p.product)
         out[p.asset_id] = (inp, peers_used)
     return out
 

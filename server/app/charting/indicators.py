@@ -222,3 +222,100 @@ def index_indicators(ohlc: pd.DataFrame, benchmark: pd.Series | None, vix: pd.Se
         out["breadth"] = breadth * 100
     cleaned = {k: v.dropna() for k, v in out.items()}
     return {k: v for k, v in cleaned.items() if not v.empty}
+
+
+# Commodities (technical.yaml chart_sets.commodities). Seasonal line: the average path of the last 15 years
+# by calendar month, drawn over the current year; chart context only, it is not in any score.
+COMMODITY_INDICATORS = [
+    IndicatorDef("donchian20_high", "Donchian 20 hoog", "price", "score", "#90a4ae"),
+    IndicatorDef("donchian20_low", "Donchian 20 laag", "price", "score", "#90a4ae"),
+    IndicatorDef("donchian55_high", "Donchian 55 hoog", "price", "score", "#546e7a"),
+    IndicatorDef("donchian55_low", "Donchian 55 laag", "price", "score", "#546e7a"),
+    IndicatorDef("sma50", "Gemiddelde 50 dagen", "price", "score", "#2962ff"),
+    IndicatorDef("sma100", "Gemiddelde 100 dagen", "price", "score", "#ff9800"),
+    IndicatorDef("sma200", "Gemiddelde 200 dagen", "price", "score", "#e91e63"),
+    IndicatorDef("mom12m", "Momentum 12 maanden (%)", "mom", "score", "#00897b"),
+    IndicatorDef("adx14", "ADX 14", "adx", "context", "#6a1b9a"),
+    IndicatorDef("atr20_pct", "ATR 20 in %", "atr", "context", "#455a64"),
+    IndicatorDef("seasonal", "Seizoenslijn (15 jaar)", "price", "context", "#8d6e63"),
+    IndicatorDef("cftc_index", "CFTC-index 3 jaar (0-100)", "cftc", "context", "#1565c0"),
+]
+COMMODITY_DEFAULT_ON = {"sma50", "sma200"}
+
+FX_INDICATORS = [
+    IndicatorDef("ema50", "EMA 50 dagen", "price", "score", "#2962ff"),
+    IndicatorDef("ema200", "EMA 200 dagen", "price", "score", "#e91e63"),
+    IndicatorDef("mom3m", "Momentum 3 maanden (%)", "mom", "score", "#00897b"),
+    IndicatorDef("mom12m", "Momentum 12 maanden (%)", "mom", "score", "#5d4037"),
+    IndicatorDef("cftc_index", "CFTC-index 3 jaar (0-100)", "cftc", "context", "#1565c0"),
+]
+FX_DEFAULT_ON = {"ema50", "ema200"}
+
+
+def _cftc_index(cftc: pd.Series | None, start) -> pd.Series | None:
+    """Where the speculators' net position stands within its range of the last three years (0-100)."""
+    if cftc is None or len(cftc) < 60:
+        return None
+    lo, hi = cftc.rolling(156, min_periods=52).min(), cftc.rolling(156, min_periods=52).max()
+    idx = ((cftc - lo) / (hi - lo) * 100).dropna()
+    return idx[idx.index >= start]
+
+
+def seasonal_line(close: pd.Series, years: int = 15) -> pd.Series | None:
+    if close.empty:
+        return None
+    last = close.index[-1]
+    months = sample(close, "1M")
+    rets = months.pct_change().dropna()
+    rets = rets[[d.year >= last.year - years and d.year < last.year for d in rets.index]]
+    if len(rets) < 60:
+        return None
+    avg = rets.groupby([d.month for d in rets.index]).mean()
+    prior = close[[d.year < last.year for d in close.index]]
+    if prior.empty:
+        return None
+    level, points = float(prior.iloc[-1]), {}
+    for month in range(1, 13):
+        level *= 1 + float(avg.get(month, 0.0))
+        day = pd.Timestamp(last.year, month, 1) + pd.offsets.MonthEnd(0)
+        points[day.date()] = level
+    return pd.Series(points)
+
+
+def commodity_indicators(ohlc: pd.DataFrame, cftc: pd.Series | None) -> dict[str, pd.Series]:
+    close = ohlc["close"].astype(float)
+    c = close.to_numpy(dtype=np.float64)
+    high = ohlc["high"].astype(float).fillna(close)
+    low = ohlc["low"].astype(float).fillna(close)
+    out: dict[str, pd.Series] = {
+        "donchian20_high": high.rolling(20).max(), "donchian20_low": low.rolling(20).min(),
+        "donchian55_high": high.rolling(55).max(), "donchian55_low": low.rolling(55).min(),
+        "sma50": _clean(talib.SMA(c, 50), close.index), "sma100": _clean(talib.SMA(c, 100), close.index),
+        "sma200": _clean(talib.SMA(c, 200), close.index),
+        "mom12m": (close / close.shift(252) - 1) * 100,
+    }
+    h, lo_ = high.to_numpy(np.float64), low.to_numpy(np.float64)
+    out["adx14"] = _clean(talib.ADX(h, lo_, c, 14), close.index)
+    out["atr20_pct"] = _clean(talib.ATR(h, lo_, c, 20), close.index) / close * 100
+    season = seasonal_line(close)
+    if season is not None:
+        out["seasonal"] = season
+    idx = _cftc_index(cftc, close.index[0])
+    if idx is not None:
+        out["cftc_index"] = idx
+    cleaned = {k: v.dropna() for k, v in out.items()}
+    return {k: v for k, v in cleaned.items() if not v.empty}
+
+
+def fx_indicators(ohlc: pd.DataFrame, cftc: pd.Series | None) -> dict[str, pd.Series]:
+    close = ohlc["close"].astype(float)
+    c = close.to_numpy(dtype=np.float64)
+    out: dict[str, pd.Series] = {
+        "ema50": _clean(talib.EMA(c, 50), close.index), "ema200": _clean(talib.EMA(c, 200), close.index),
+        "mom3m": (close / close.shift(63) - 1) * 100, "mom12m": (close / close.shift(255) - 1) * 100,
+    }
+    idx = _cftc_index(cftc, close.index[0])
+    if idx is not None:
+        out["cftc_index"] = idx
+    cleaned = {k: v.dropna() for k, v in out.items()}
+    return {k: v for k, v in cleaned.items() if not v.empty}

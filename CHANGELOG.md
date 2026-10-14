@@ -1,5 +1,96 @@
 # Changelog
 
+## Fase 6 – Grondstoffen en valuta (2026-10-14)
+
+### Gebouwd
+
+- **Nieuwe bronnen**:
+  - CFTC Commitments of Traders: posities van speculanten, wekelijks. Voor grondstoffen managed money,
+    voor valuta leveraged funds, als deel van de open interest. Een cijfer telt pas mee vanaf de vrijdag
+    van publicatie.
+  - EIA: wekelijkse voorraden van ruwe olie, benzine, destillaten en aardgas. Werkt alleen met een gratis
+    `EIA_API_KEY`.
+  - Wereldbank: lopende rekening en ruilvoet per land. Een jaarcijfer telt pas mee een half jaar na het jaar.
+  - FRED: korte rentes (€STR, SOFR, SONIA, OECD) en reële effectieve wisselkoersen (BIS).
+- **Termijnreeksen**: per grondstof de koers van het eerstvolgende contract (Yahoo `=F`) en dagelijks de
+  eerste twee contracten die handelen. Daaruit volgt de helling van de termijncurve op jaarbasis
+  (backwardation is positief). Over een jaar levert dezelfde opslag ook het basis-momentum.
+- **20 grondstoffen** (`config/commodities.yaml`): 4 edelmetalen, 5 energie, 2 industriemetalen, 7 landbouw
+  en 2 vee. Sjablonen Grondstof en Edelmetaal:
+  - de trend wordt gemeten op het ETC in dollar, omdat dat een voor rollen gecorrigeerde reeks is
+    (hoofdstuk 7); zonder ETC op het eerstvolgende contract, met een melding;
+  - dollarindex en reële rente zijn voor alle grondstoffen gelijk, en tellen daarom tegenover hun eigen
+    historie (`own_history_metrics`);
+  - bij edelmetalen staat een melding als macro en koerstrend elkaar tegenspreken.
+- **Productoordeel voor ETC's** (`config/etcs.csv`, 24 ETC's).
+  - De onderzoeksagent controleerde elke waarde op 14 oktober bij de uitgever, justETF of een andere
+    opgehaalde bron.
+  - Gelijk gewogen: fysiek of termijncontracten, onderpand, kosten, rolopbrengst over 12 maanden (of
+    tracking difference bij fysiek).
+  - Productgates:
+    - rolverlies slechter dan 10% per jaar: hoogstens C;
+    - hefboom of invers: hoogstens D;
+    - zonder onderpand: hoogstens B-.
+  - Producten worden alleen met producten vergeleken.
+  - Op de tab staat bij elke grondstof het best beoordeelde product. De grondstofpagina toont alle
+    producten, de ETC-pagina het oordeel over de grondstof zelf.
+- **15 valutaparen**, elk ook omgekeerd (30 in totaal), berekend uit de ECB-koersen. Sjabloon Valutapaar:
+  - carry: renteverschil gedeeld door volatiliteit;
+  - momentum over 3 tot 12 maanden;
+  - waarde: reële effectieve koers tegenover het 10-jaarsgemiddelde;
+  - macro: lopende rekening, ruilvoet en rentepad;
+  - CFTC-positie;
+  - de regel "carry halveren bij een volatiliteit of VIX boven het 80e percentiel";
+  - de gates gestuurde valuta (CNY) en geen voordeel;
+  - de horizon per pijler op de pagina.
+- **Spiegeling**: het omgekeerde paar krijgt elke maatstaf met tegengesteld teken (de technische score:
+  100 min). Beide richtingen staan in één vergelijkingsgroep, zodat de scores samen precies 100 zijn.
+- **Grafieken**:
+  - grondstoffen: Donchian 20/55, gemiddelden over 50/100/200 dagen, momentum over 12 maanden, ADX 14,
+    ATR 20, een seizoenslijn over 15 jaar (alleen context) en een CFTC-index over 3 jaar;
+  - valuta: EMA 50/200, momentum en de CFTC-index.
+- Koersen in dollarcent (USX, zoals maïs en suiker) worden naar dollar omgerekend.
+- **Taak `commodities`** (werkdagen 22:00 UTC).
+- **Modelversie 0.5.0**: `own_history_metrics`, `params.commodities` en `params.fx`. De reële rente staat
+  nu als verhouding (0,029) in plaats van procent; dat geldt ook voor Bitcoin.
+
+### Acceptatie (live gemeten op 14 oktober 2026, peildatum 13 oktober)
+
+- **Elke grondstof toont een oordeel over de grondstof en over het product:** 20 van 20.
+  - Elke grondstof heeft minstens één beoordeeld ETC: 23 met een productoordeel, 1 voorlopig (Heating Oil,
+    te dun verhandeld voor een rolopbrengst).
+  - De rolopbrengst laat de bekende patronen zien: aardgas −26,8% (contango), maïs, katoen en tarwe onder
+    −10% (productgate geraakt), Brent en WTI sterk positief (backwardation, de termijncurve loopt nu 12%
+    per jaar af).
+- **EUR/USD en USD/EUR zijn elkaars spiegelbeeld:** EUR/USD D (36,9) en USD/EUR B- (63,1). Over alle
+  15 paren is de grootste afwijking van "samen 100" 0,00000000000001 punt. Getest per paar en van begin
+  tot eind.
+- `verify`: 771 van 771 grades zijn exact te herberekenen.
+- Tests: 249 voor de rekenserver en 14 voor de webinterface.
+
+### Keuzes en afwijkingen
+
+- **Geen EIA-sleutel:** de pijler Fundamentals (voorraden) is voor energie nog leeg. De adapter is klaar;
+  vul `EIA_API_KEY` in.
+- **Eurozone bij de Wereldbank:** geen cijfers voor de eurozone als geheel. Bij EUR-paren ontbreken
+  lopende rekening en ruilvoet; het rentepad telt wel.
+- **Edelmetalen:** aankopen door centrale banken en ETF-stromen hebben geen gratis bron. De pijler Vraag
+  blijft leeg, waardoor de datadekking op 75% uitkomt.
+- **Basis-momentum** vraagt een jaar historie van het tweede contract. Die wordt vanaf nu dagelijks
+  opgeslagen; tot dan is de pijler leeg (5%).
+- **Termijncurve:** Yahoo geeft geen gratis curve met historie. De app slaat daarom elke dag de eerste
+  twee contracten op en bouwt de curve zelf op.
+- **ETC-gegevens:** de WisdomTree-site weigert geautomatiseerde aanvragen.
+  - Hun kosten (0,54%) komen van twee onafhankelijke bronnen; justETF noemt 0,49%.
+  - Bij Xetra-Gold zijn de kosten leeg gelaten: formeel 0%, maar via de effectenrekening betaal je 0,025%
+    bewaarloon per maand.
+  - Nikkel en zink zijn weggelaten: Yahoo heeft geen termijnreeks van de LME.
+- **Brent en WTI:** de rolopbrengst van +55% en +40% over 12 maanden is groot. De meting is consistent:
+  het ETC steeg 98%, het eerstvolgende contract 58%, met een sterk afdalende termijncurve tijdens de
+  prijspiek van maart. Controleer dit gerust tegen de factsheet.
+- **Goud en zilver** krijgen een F: ze staan 21% en 49% onder hun top van dit jaar (de trend is zwak) en de
+  reële rente staat hoog tegenover de eigen historie.
+
 ## Fase 5 – ETF's, obligaties, indices en marktregime (2026-10-14)
 
 ### Gebouwd

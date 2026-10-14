@@ -13,7 +13,8 @@ type Metric = { id: string; value: number | null; score: number | null; weight: 
   unit: string | null; direction: string | null; peer_pct: number | null; own_pct: number | null;
   source: string | null; peer_group: string | null; peer_count: number | null };
 type Pillar = { id: string; name_nl: string; weight: number; effective_weight: number; score: number | null;
-  coverage: number; timing: boolean; contribution: number | null; metrics: Metric[] };
+  coverage: number; timing: boolean; contribution: number | null; metrics: Metric[];
+  horizon_months?: number[] | null };
 type Gate = { id: string; status: string; cap: string | null; label_nl: string | null; reason_nl: string;
   detail: string | null };
 type Detail = {
@@ -107,8 +108,9 @@ export default async function AssetPage({ params }: Props) {
         )}
       </header>
 
-      {(d.asset.asset_class === "etf" || d.asset.asset_class === "bond") && <Characteristics categories={d.asset.categories} />}
+      {["etf", "bond", "etc"].includes(d.asset.asset_class) && <Characteristics categories={d.asset.categories} />}
       {d.asset.asset_class === "etf" && <EtfPeers id={d.asset.id} />}
+      {["commodity", "etc", "fx"].includes(d.asset.asset_class) && <Related id={d.asset.id} kind={d.asset.asset_class} score={s?.score ?? null} />}
 
       {s && d.pillars && d.pillars.length > 0 && (
         <>
@@ -118,7 +120,8 @@ export default async function AssetPage({ params }: Props) {
             <div className="pillars">
               {d.pillars.map((p) => (
                 <div key={p.id} className="pillar-row">
-                  <div className="pillar-name">{p.name_nl}{p.timing && <span className="tag">timing</span>}</div>
+                  <div className="pillar-name">{p.name_nl}{p.timing && <span className="tag">timing</span>}
+                    {p.horizon_months && <span className="tag" title="Horizon van deze pijler">{horizon(p.horizon_months)}</span>}</div>
                   <div className="bar" role="img" aria-label={`${p.name_nl}: ${n(p.score)} van 100`}>
                     <span style={{ width: `${p.score ?? 0}%` }} className={p.score === null ? "" : p.score >= 60 ? "good" : p.score < 40 ? "bad" : "mid"} />
                   </div>
@@ -236,11 +239,13 @@ function GradeValue({ s }: { s: NonNullable<Detail["snapshot"]> }) {
 const CHARACTERISTIC_LABELS: Record<string, string> = {
   issuer: "Uitgever", domicile: "Domicilie", replication: "Replicatie", distribution: "Dividend",
   securities_lending: "Uitlenen van effecten", launch_date: "Start", category: "Categorie",
-  currency_hedged: "Valutarisico afgedekt naar", fund_currency: "Fondsvaluta", leveraged_inverse: "Hefboom of invers",
+  currency_hedged: "Valutarisico afgedekt", fund_currency: "Fondsvaluta", leveraged_inverse: "Hefboom of invers",
+  structure: "Structuur", collateralized: "Onderpand", trading_currency: "Handelsvaluta",
 };
 const VALUE_LABELS: Record<string, string> = {
   full: "volledig fysiek", sampling: "fysiek, steekproef", synthetic: "synthetisch (swap)", acc: "herbeleggend",
-  dist: "uitkerend", yes: "ja", no: "nee",
+  dist: "uitkerend", yes: "ja", no: "nee", physical: "fysiek (metaal in een kluis)",
+  futures: "termijncontracten", swap: "swap",
 };
 
 function Characteristics({ categories }: { categories: string[] }) {
@@ -306,6 +311,67 @@ async function EtfPeers({ id }: { id: string }) {
         belasting op dividend (domicilie, of synthetisch zonder Amerikaanse bronbelasting), opbrengst uit het
         uitlenen van effecten en de manier van repliceren.{source ? ` Gemeten: ${source}.` : ""}
       </p>
+    </section>
+  );
+}
+
+type RelatedRow = { id: string; name: string; asset_class: string; letter: string | null; status: string;
+  score: number | null; structure: string | null; collateralized: string | null; ongoing_charges: number | null;
+  roll_yield_12m: number | null; tracking_difference: number | null };
+
+async function Related({ id, kind, score }: { id: string; kind: string; score: number | null }) {
+  const r = await fetchServer<{ rows: RelatedRow[] }>(`/api/assets/${encodeURIComponent(id)}/products`);
+  if (!r) return null;
+  if (kind === "fx") {
+    const m = r.rows[0];
+    if (!m) return null;
+    return (
+      <section className="card">
+        <h2 className="card-title">Spiegelpaar</h2>
+        <p><Link href={`/fx/${m.id}`}>{m.name}</Link>: {m.status === "no_grade" ? "geen grade" : `${m.letter}, score ${n(m.score)}`}.
+          {score !== null && m.score !== null && <> Samen {n(score + m.score)}: een richtingsscore voor de ene kant is het
+            spiegelbeeld van de andere.</>}</p>
+      </section>
+    );
+  }
+  if (kind === "etc") {
+    const c = r.rows[0];
+    if (!c) return null;
+    return (
+      <section className="card">
+        <h2 className="card-title">Oordeel over de grondstof zelf</h2>
+        <p><Link href={`/commodities/${c.id}`}>{c.name}</Link>: {c.status === "no_grade" ? "geen grade" : c.letter}.
+          De grade hierboven is het productoordeel: hoe goed dit product de grondstof volgt en wat het kost.</p>
+      </section>
+    );
+  }
+  return (
+    <section className="card">
+      <h2 className="card-title">Producten om deze grondstof aan te houden</h2>
+      {r.rows.length === 0 ? <p className="muted">Geen product (ETC) gevolgd voor deze grondstof.</p> : (
+        <div className="table-wrap">
+          <table className="ranking">
+            <thead><tr><th>Product</th><th>Productoordeel</th><th>Structuur</th><th>Onderpand</th>
+              <th className="num"><Term id="ongoing_charges">Kosten</Term></th>
+              <th className="num"><Term id="roll_yield_12m">Rolopbrengst 12 mnd</Term></th></tr></thead>
+            <tbody>
+              {r.rows.map((p) => (
+                <tr key={p.id}>
+                  <td><Link href={`/commodities/${p.id}`}>{p.name}</Link></td>
+                  <td>{p.status === "no_grade" ? "–" : p.letter}</td>
+                  <td>{p.structure ? VALUE_LABELS[p.structure] ?? p.structure : "–"}</td>
+                  <td>{p.collateralized ? VALUE_LABELS[p.collateralized] : "–"}</td>
+                  <td className="num">{p.ongoing_charges === null ? "–" : pct.format(p.ongoing_charges)}</td>
+                  <td className="num">{p.roll_yield_12m === null ? "–" : pct.format(p.roll_yield_12m)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <p className="muted small">Een particulier kan de grondstof zelf niet aanhouden; daarom twee oordelen: de grondstof
+        (hierboven) en het product. Rolopbrengst: rendement van het product min de koersverandering van het
+        eerstvolgende termijncontract.</p>
     </section>
   );
 }

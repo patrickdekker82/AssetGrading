@@ -73,7 +73,18 @@ async function Ranking({ tab, phase }: { tab: string; phase: number }) {
   const aex = grades.rows.filter((r) => r.lists?.includes("AEX"));
   const views = tab === "watchlist"
     ? [{ id: "all", label: "Volglijst", rows: list }]
-    : ["etfs", "bonds", "indices"].includes(tab)
+    : tab === "commodities"
+      ? [
+        { id: "list", label: "Grondstoffen", rows: list.filter((r) => r.asset_class === "commodity") },
+        { id: "etc", label: "Producten (ETC)", rows: list.filter((r) => r.asset_class === "etc") },
+      ]
+      : tab === "fx"
+        ? [
+          { id: "list", label: "Paren", rows: list.filter((r) => r.direction !== "inverse") },
+          { id: "inverse", label: "Omgekeerd", rows: list.filter((r) => r.direction === "inverse") },
+          { id: "all", label: "Beide richtingen", rows: list },
+        ]
+        : ["etfs", "bonds", "indices"].includes(tab)
       ? [{ id: "list", label: "Alle", rows: list }]
       : tab === "stocks"
       ? [

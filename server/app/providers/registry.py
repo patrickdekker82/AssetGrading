@@ -7,6 +7,7 @@ import httpx
 
 from app.providers.base import CallRecorder, Provider
 from app.providers.binance import BinanceProvider
+from app.providers.cftc import CftcProvider
 from app.providers.coinbase import CoinbaseProvider
 from app.providers.coingecko import CoinGeckoProvider
 from app.providers.coinmetrics import CoinMetricsProvider
@@ -14,6 +15,7 @@ from app.providers.config import ProvidersConfig
 from app.providers.defillama import DefiLlamaProvider
 from app.providers.derivatives import BinanceFuturesProvider, BybitProvider, OkxProvider
 from app.providers.ecb import EcbProvider
+from app.providers.eia import EiaProvider
 from app.providers.frankfurter import FrankfurterProvider
 from app.providers.fred import FredProvider
 from app.providers.sec import SecProvider
@@ -31,6 +33,7 @@ from app.providers.venues import (
     RugCheckProvider,
     StablecoinSupplyProvider,
 )
+from app.providers.worldbank import WorldBankProvider
 
 ADAPTERS: dict[str, type[Provider]] = {
     "binance": BinanceProvider,
@@ -55,6 +58,9 @@ ADAPTERS: dict[str, type[Provider]] = {
     "openfigi": OpenFigiProvider,
     "ecb": EcbProvider,
     "yahoo_fund": YahooFundProvider,
+    "cftc": CftcProvider,
+    "eia": EiaProvider,
+    "worldbank": WorldBankProvider,
 }
 
 

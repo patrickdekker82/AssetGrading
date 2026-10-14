@@ -24,10 +24,13 @@ TAB_SOURCES = {
     "etfs": ("etf", []),          # static lists: every followed asset is in the list
     "bonds": ("bond", []),
     "indices": ("index", []),
+    "commodities": ("commodity,etc", []),   # the commodities and the products (ETCs) to hold them
+    "fx": ("fx", []),
 }
 # The list is recorded on the day of the run: the crypto run just after midnight grades the day before,
 # a stock run can grade Friday's close on Monday.
-LIST_LAG_DAYS = {"crypto": 1, "stocks": 4, "watchlist": 4, "etfs": 4, "bonds": 4, "indices": 4}
+LIST_LAG_DAYS = {"crypto": 1, "stocks": 4, "watchlist": 4, "etfs": 4, "bonds": 4, "indices": 4, "commodities": 4,
+                 "fx": 4}
 LIST_LABELS = {"crypto_top": "top", "stocks_us": "VS", "stocks_aex": "AEX"}
 
 
@@ -40,10 +43,10 @@ def grades(request: Request, tab: str = "crypto") -> dict:
     if jobs.model_version_id is None:
         raise HTTPException(503, "Geen modelversie geladen")
     if tab == "watchlist":
-        classes = [c for c, _ in TAB_SOURCES.values()]
+        classes = [c for cs, _ in TAB_SOURCES.values() for c in cs.split(",")]
         universes = [u for _, us in TAB_SOURCES.values() for u in us]
     else:
-        classes, universes = [TAB_SOURCES[tab][0]], TAB_SOURCES[tab][1]
+        classes, universes = TAB_SOURCES[tab][0].split(","), TAB_SOURCES[tab][1]
     with jobs.sf() as session:
         as_of = session.execute(text(
             "SELECT max(g.as_of) FROM grade_snapshot g JOIN asset a ON a.id = g.asset_id "
@@ -71,7 +74,7 @@ def grades(request: Request, tab: str = "crypto") -> dict:
                 SELECT asset_id, array_agg(round(close_eur::numeric, 10)::float8 ORDER BY ts) AS closes
                 FROM price_daily_eur WHERE ts > :d - 90 AND ts <= :d GROUP BY asset_id
             )
-            SELECT a.slug, a.asset_class, a.sector, a.country, a.name, a.symbol, g.template_id, g.status,
+            SELECT a.slug, a.asset_class, a.sector, a.country, a.name, a.symbol, a.categories, g.template_id, g.status,
                    g.letter, g.score, g.quality, g.timing, g.coverage, g.peg_safety, g.price_eur, g.result,
                    l.rank AS mcap_rank, l.included, l.exclusion, l.market_cap_eur, l.lists,
                    m.letter AS letter_month_ago, sp.closes AS spark, (w.asset_id IS NOT NULL) AS watched
@@ -104,9 +107,23 @@ def grades(request: Request, tab: str = "crypto") -> dict:
             "exclusion": r["exclusion"],
             "mcap_rank": r["mcap_rank"], "btc_relative": (res.get("btc_relative") or {}).get("letter"),
             "spark": r["spark"] or [], "watched": bool(r["watched"]), "asset_class": r["asset_class"],
+            "direction": next((c.split(":", 1)[1] for c in r["categories"] or [] if str(c).startswith("direction:")),
+                              None),
+            "product": bool((res.get("pillars") or [{}])[0].get("id") == "product"),
+            "commodity": next((c.split(":", 1)[1] for c in r["categories"] or [] if str(c).startswith("commodity:")),
+                              None),
             "market_cap_eur": float(r["market_cap_eur"]) if r["market_cap_eur"] is not None else None,
             "lists": [LIST_LABELS.get(u, u) for u in (r["lists"] or [])],
         })
+    # Next to each commodity: the best-graded product (ETC) to hold it (chapter 2).
+    best: dict[str, dict] = {}
+    for r in out:
+        if r["asset_class"] == "etc" and r["commodity"] and r["status"] != "no_grade":
+            if r["commodity"] not in best or (r["score"] or 0) > (best[r["commodity"]]["score"] or 0):
+                best[r["commodity"]] = {"id": r["id"], "name": r["name"], "letter": r["letter"], "score": r["score"]}
+    for r in out:
+        if r["asset_class"] == "commodity":
+            r["best_product"] = best.get(r["id"])
     if tab == "watchlist":
         out = [r for r in out if r["watched"]]
     out.sort(key=lambda x: (STATUS_ORDER.get(x["status"], 9), -(x["score"] or 0), x["mcap_rank"] or 999))

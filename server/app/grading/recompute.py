@@ -13,6 +13,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.grading.crypto import min_peers
 from app.grading.engine import GradeInput, grade
 from app.grading.percentiles import percentile_of
 from app.modelconfig import ModelConfig
@@ -52,7 +53,7 @@ def recompute(snapshot: GradeSnapshot, config: ModelConfig) -> Check:
         if values is None or mi is None or mi.value is None:
             continue
         expected = None
-        if len(values) >= 3:
+        if len(values) >= min_peers(config, inp.template_id):
             higher = config.metrics[metric_id].direction == "higher"
             expected = percentile_of(mi.value, values, higher_is_better=higher, winsor=winsor)
         if expected != mi.peer_pct:

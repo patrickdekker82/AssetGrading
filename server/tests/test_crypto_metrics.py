@@ -109,7 +109,7 @@ def test_bitcoin_onchain_metrics():
     assert m.values["nupl"] == pytest.approx(1 - 1 / 1.5)
     assert m.values["price_to_realized"] == pytest.approx(1.5)
     assert m.values["puell_multiple"] == pytest.approx(20 / ((364 * 10 + 20) / 365))
-    assert m.values["real_rate"] == 1.6
+    assert m.values["real_rate"] == pytest.approx(0.016)   # FRED gives percent; the metric is a ratio
     assert m.values["stablecoin_supply_growth"] == pytest.approx(599 / 569 - 1)
     assert len(m.history["mvrv_z"]) > 0
 

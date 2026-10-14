@@ -60,8 +60,9 @@ class YahooProvider(Provider):
             raise ProviderError(f"yahoo {symbol}: no data", 404)
         meta = result.get("meta") or {}
         currency, scale = meta.get("currency") or default_currency or "USD", Decimal(1)
-        if currency in ("GBp", "GBX", "ZAc", "ILA"):  # prices in pence / cents
-            currency, scale = {"GBp": "GBP", "GBX": "GBP", "ZAc": "ZAR", "ILA": "ILS"}[currency], Decimal("0.01")
+        if currency in ("GBp", "GBX", "ZAc", "ILA", "USX"):  # prices in pence / cents
+            currency, scale = {"GBp": "GBP", "GBX": "GBP", "ZAc": "ZAR", "ILA": "ILS", "USX": "USD"}[currency], \
+                Decimal("0.01")
         tz = ZoneInfo(meta.get("exchangeTimezoneName") or "UTC")
         stamps = result.get("timestamp") or []
         indicators = result.get("indicators") or {}
