@@ -15,6 +15,14 @@
     python -m app.cli explain <asset>     write the explanation of one asset now (direct call, needs
                                           ANTHROPIC_API_KEY); the nightly job uses the batch API
     python -m app.cli check-explanations  check every stored explanation against its input again
+    python -m app.cli backtest [YYYY-MM] [YYYY-MM] [classes]
+                                          point-in-time backtest (default: config/evaluation.yaml),
+                                          classes comma-separated: crypto,stocks,markets,commodities
+    python -m app.cli backtest resume <run>
+                                          continue a backtest that stopped
+    python -m app.cli evaluate            monthly measurement on live grades now
+    python -m app.cli proposals           list model proposals
+    python -m app.cli apply-proposal <id> write an approved proposal into a new model version
 """
 
 import sys
@@ -55,6 +63,14 @@ def main(argv: list[str]) -> int:
             return _explain(argv[1] if len(argv) > 1 else "")
         elif command == "check-explanations":
             return _check_explanations()
+        elif command == "backtest":
+            return _backtest(*argv[1:4])
+        elif command == "evaluate":
+            return _run_job("evaluation")
+        elif command == "proposals":
+            return _proposals()
+        elif command == "apply-proposal":
+            return _apply_proposal(int(argv[1]))
         else:
             print(f"unknown command: {command}", file=sys.stderr)
             return 2
@@ -99,13 +115,15 @@ def _run_job(name: str) -> int:
 
     stocks = load_stocks_config(settings.config_dir / "stocks.yaml")
     from app.ai import load_ai_config, make_client
+    from app.evaluation.outcomes import EvaluationSettings
 
     ai = load_ai_config(settings.config_dir / "ai.yaml")
     labels = {k: v.label for k, v in load_glossary(settings.config_dir / "glossary.nl.yaml").metrics.items()}
     ctx = JobContext(engine, sf, Providers(cfg, DbRecorder(sf)), cfg, universes, model, version_id, stocks=stocks,
                      markets=load_markets_config(settings.config_dir),
                      commodities=load_commodities_config(settings.config_dir),
-                     ai=ai, labels=labels, llm_client=make_client(ai))
+                     ai=ai, labels=labels, llm_client=make_client(ai),
+                     evaluation=EvaluationSettings.load(settings.config_dir / "evaluation.yaml"))
     run = run_job(ctx, name, trigger="cli")
     print(json.dumps({"status": run.status, "summary": run.summary, "error": run.error}, indent=2, default=str))
     return 0 if run.status in ("ok", "partial", "skipped") else 1
@@ -262,6 +280,62 @@ def _check_explanations() -> int:
                 print(f"{snap.name} ({row.source}, {row.snapshot_as_of}): {'; '.join(problems)}")
     print(f"{checked} toelichtingen gecontroleerd, {failed} met een getal of grade buiten de invoer")
     return 1 if failed else 0
+
+
+def _backtest(start: str | None = None, end: str | None = None, classes: str | None = None) -> int:
+    import json
+    import logging
+    from datetime import UTC, date, datetime
+
+    from app.commodities_config import load_commodities_config
+    from app.evaluation.backtest import Backtest
+    from app.evaluation.outcomes import EvaluationSettings, month_end
+    from app.markets_config import load_markets_config
+    from app.providers.config import load_providers_config
+    from app.stocks_config import load_stocks_config
+
+    logging.basicConfig(level=logging.INFO)
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    settings, sf, config, version_id = _context()
+    ev = EvaluationSettings.load(settings.config_dir / "evaluation.yaml")
+    cfg = load_providers_config(settings.config_dir / "providers.yaml")
+    resume = start == "resume"
+    first = date.fromisoformat((ev.raw["backtest"]["start"] if resume or not start else start) + "-01")
+    last = month_end(date.fromisoformat(end + "-01")) if end and not resume else datetime.now(UTC).date()
+    bt = Backtest(sf, config, version_id, ev, date.fromisoformat(cfg.crypto.history_start),
+                  load_stocks_config(settings.config_dir / "stocks.yaml"), load_markets_config(settings.config_dir),
+                  load_commodities_config(settings.config_dir))
+    if start == "resume":
+        run_id = int(end)
+        report = bt.resume(run_id)
+    else:
+        run_id, report = bt.run(first, last, classes.split(",") if classes else list(ev.raw["backtest"]["classes"]))
+    print(json.dumps({"run": run_id, **report.as_dict()}, indent=2, ensure_ascii=False)[:5000])
+    return 0
+
+
+def _proposals() -> int:
+    from sqlalchemy import text
+
+    _, sf, _, _ = _context()
+    with sf() as session:
+        rows = session.execute(text("SELECT id, kind, status, created_at, summary_nl FROM model_proposal ORDER BY id"))
+        for r in rows:
+            print(f"{r.id}  {r.kind}  {r.status}  {r.created_at:%Y-%m-%d}  {r.summary_nl}")
+    return 0
+
+
+def _apply_proposal(proposal_id: int) -> int:
+    from app.evaluation.proposals import apply_proposal
+
+    settings, sf, config, _ = _context()
+    try:
+        version = apply_proposal(sf, settings.config_dir / "model", config, proposal_id)
+    except ValueError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
+    print(f"Modelversie {version} vastgelegd. Herstart de server om hem te gebruiken.")
+    return 0
 
 
 if __name__ == "__main__":

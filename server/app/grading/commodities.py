@@ -22,7 +22,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.commodities_config import CommoditiesConfig, FxPair
-from app.grading.crypto import Prepared, write_snapshots
+from app.grading.crypto import LIVE, Prepared, SnapshotSink, write_snapshots
 from app.grading.crypto_inputs import Metrics
 from app.grading.markets import _cats, realized_vol_series
 from app.grading.percentiles import percentile_of
@@ -387,12 +387,12 @@ def prepare_fx(data: Data, config: ModelConfig, cc: CommoditiesConfig) -> list[P
 
 
 def grade_commodities(sf: sessionmaker[Session], config: ModelConfig, model_version_id: int, cc: CommoditiesConfig,
-                      as_of: date, knowledge: datetime | None = None) -> Report:
+                      as_of: date, knowledge: datetime | None = None, sink: SnapshotSink = LIVE) -> Report:
     report = Report()
     knowledge = knowledge or datetime.now(UTC)
     with sf() as session:
         data = load_data(session, as_of, knowledge)
-    write_snapshots(sf, prepare_commodities(data, config, cc), config, model_version_id, as_of, knowledge, report)
-    write_snapshots(sf, prepare_etcs(data, config, cc), config, model_version_id, as_of, knowledge, report)
-    write_snapshots(sf, prepare_fx(data, config, cc), config, model_version_id, as_of, knowledge, report)
+    write_snapshots(sf, prepare_commodities(data, config, cc), config, model_version_id, as_of, knowledge, report, sink)
+    write_snapshots(sf, prepare_etcs(data, config, cc), config, model_version_id, as_of, knowledge, report, sink)
+    write_snapshots(sf, prepare_fx(data, config, cc), config, model_version_id, as_of, knowledge, report, sink)
     return report

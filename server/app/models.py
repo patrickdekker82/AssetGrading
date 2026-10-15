@@ -244,3 +244,28 @@ class MarketRegime(Base):
     week_end: Mapped[date] = mapped_column(Date)
     inputs: Mapped[dict] = mapped_column(JSONB)
     computed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class BacktestSnapshot(Base):
+    """A grade recomputed for a past month-end with only the data known then (chapter 8). Never live."""
+
+    __tablename__ = "backtest_snapshot"
+    __table_args__ = (UniqueConstraint("run_id", "asset_id", "as_of"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("backtest_run.id"))
+    asset_id: Mapped[int] = mapped_column(ForeignKey("asset.id"))
+    as_of: Mapped[date] = mapped_column(Date)
+    model_version_id: Mapped[int] = mapped_column(ForeignKey("model_version.id"))
+    template_id: Mapped[str] = mapped_column(String(40))
+    status: Mapped[str] = mapped_column(String(20))
+    score: Mapped[float | None] = mapped_column(Float)
+    quality: Mapped[float | None] = mapped_column(Float)
+    timing: Mapped[float | None] = mapped_column(Float)
+    coverage: Mapped[float] = mapped_column(Float)
+    letter: Mapped[str | None] = mapped_column(String(3))
+    peg_safety: Mapped[int | None] = mapped_column(Integer)
+    price_eur: Mapped[float | None] = mapped_column(Float)
+    knowledge_time: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    inputs: Mapped[dict] = mapped_column(JSONB)
+    result: Mapped[dict] = mapped_column(JSONB)

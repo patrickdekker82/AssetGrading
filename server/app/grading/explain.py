@@ -103,7 +103,7 @@ def _quality_vs_timing(quality: float, timing: float) -> str:
 
 def change_thresholds(result: dict, config: ModelConfig) -> dict | None:
     """The scores at which the letter would move, including the hysteresis margin."""
-    scale = config.settings.letter_scale
+    scale = config.letter_scale_for(result["template_id"])
     margin = config.settings.stability.hysteresis_points
     letter = result.get("hysteresis_letter") or result.get("raw_letter")
     if letter not in GRADES:

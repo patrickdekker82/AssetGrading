@@ -343,3 +343,15 @@ h3 { font-size: 15px; margin: 0; }
 .source-list { list-style: none; margin: 0; padding: 0 16px 12px; }
 .source-list li { padding: 8px 0; border-top: 1px solid var(--border); }
 .source-list li:first-child { border-top: 0; }
+
+.horizon-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.horizon-pick .button { text-decoration: none; }
+.backtest { border-style: dashed; }
+.backtest-label { margin: 0 16px 8px; }
+.proposal { padding: 8px 16px 14px; border-top: 1px solid var(--border); }
+.proposal p { margin: 6px 0; }
+.proposal-actions { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+.strong { font-weight: 650; }
+.status-open { color: var(--warn); }
+.status-approved { color: var(--good, #1a7f37); }
+.status-rejected { color: var(--muted); }

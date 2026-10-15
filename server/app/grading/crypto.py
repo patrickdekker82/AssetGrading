@@ -21,7 +21,7 @@ from app.grading.percentiles import percentile_of, weighted_percentile_of
 from app.grading.technical import TechRaw, tech_raw, tech_scores
 from app.ingest.report import Report
 from app.modelconfig import ModelConfig
-from app.models import GradeSnapshot
+from app.models import BacktestSnapshot, GradeSnapshot
 
 log = logging.getLogger("graadmeter.grading")
 MIN_PEERS = 3
@@ -183,39 +183,70 @@ def build_inputs(prepared: list[Prepared], config: ModelConfig, as_of: date) -> 
     return out
 
 
-def _previous_state(session: Session, asset_id: int, model_version_id: int, as_of: date,
-                    days: int) -> tuple[str | None, list[str]]:
-    rows = session.execute(
-        select(GradeSnapshot.result["hysteresis_letter"].astext, GradeSnapshot.result["raw_letter"].astext)
-        .where(GradeSnapshot.asset_id == asset_id, GradeSnapshot.model_version_id == model_version_id,
-               GradeSnapshot.as_of < as_of)
-        .order_by(GradeSnapshot.as_of.desc()).limit(max(days - 1, 1))
-    ).all()
-    if not rows:
-        return None, []
-    prev = rows[0][0]
-    recent = [r[1] for r in reversed(rows) if r[1]]
-    return prev, recent
+@dataclass
+class SnapshotSink:
+    """Where grades go. Live: grade_snapshot. Backtest: backtest_snapshot of one run, with the regime of that
+    month computed from the data known then (the stored live regime history is not point in time)."""
+
+    run_id: int | None = None
+    regime: str | None = None
+
+    @property
+    def live(self) -> bool:
+        return self.run_id is None
+
+    @property
+    def table(self):
+        return GradeSnapshot if self.live else BacktestSnapshot
+
+    def source_sql(self) -> str:
+        """A FROM clause for reading snapshots written to this sink (e.g. index letters for ETFs)."""
+        return "grade_snapshot" if self.live else f"(SELECT * FROM backtest_snapshot WHERE run_id = {int(self.run_id)})"
+
+    def regime_on(self, session: Session, as_of: date, model_version_id: int) -> str | None:
+        from app.grading.regime import regime_on
+
+        return regime_on(session, as_of, model_version_id) if self.live else self.regime
+
+    def previous_state(self, session: Session, asset_id: int, model_version_id: int, as_of: date,
+                       days: int) -> tuple[str | None, list[str]]:
+        t = self.table
+        q = (select(t.result["hysteresis_letter"].astext, t.result["raw_letter"].astext)
+             .where(t.asset_id == asset_id, t.model_version_id == model_version_id, t.as_of < as_of))
+        if not self.live:
+            q = q.where(t.run_id == self.run_id)
+        rows = session.execute(q.order_by(t.as_of.desc()).limit(max(days - 1, 1))).all()
+        if not rows:
+            return None, []
+        return rows[0][0], [r[1] for r in reversed(rows) if r[1]]
+
+    def row(self, row: dict) -> dict:
+        if self.live:
+            return row
+        # Backtest rows keep the engine input (to recompute) but not the bulky peer lists and raw values.
+        return {**row, "run_id": self.run_id,
+                "inputs": {"grade_input": row["inputs"]["grade_input"], "notes": row["inputs"].get("notes", [])}}
+
+
+LIVE = SnapshotSink()
 
 
 def grade_crypto(sf: sessionmaker[Session], config: ModelConfig, model_version_id: int, as_of: date,
-                 history_start: date, knowledge: datetime | None = None) -> Report:
+                 history_start: date, knowledge: datetime | None = None, sink: SnapshotSink = LIVE) -> Report:
     report = Report()
     knowledge = knowledge or datetime.now(UTC)
     with sf() as session:
         data = load_crypto_data(session, as_of, knowledge, history_start)
     prepared = prepare(data, config)
-    write_snapshots(sf, prepared, config, model_version_id, as_of, knowledge, report)
+    write_snapshots(sf, prepared, config, model_version_id, as_of, knowledge, report, sink)
     return report
 
 
 def write_snapshots(sf: sessionmaker[Session], prepared: list[Prepared], config: ModelConfig, model_version_id: int,
-                    as_of: date, knowledge: datetime, report: Report) -> None:
+                    as_of: date, knowledge: datetime, report: Report, sink: SnapshotSink = LIVE) -> None:
     """Grade every prepared asset and store the snapshots (an existing snapshot for the day is kept)."""
-    from app.grading.regime import regime_on
-
     with sf() as session:
-        regime = regime_on(session, as_of, model_version_id)
+        regime = sink.regime_on(session, as_of, model_version_id)
     apply_regime_metric(prepared, config, regime)
     inputs = build_inputs(prepared, config, as_of)
     days = config.settings.stability.hysteresis_days
@@ -223,16 +254,19 @@ def write_snapshots(sf: sessionmaker[Session], prepared: list[Prepared], config:
     with sf() as session:
         for p in prepared:
             inp, peers = inputs[p.asset_id]
-            inp.prev_letter, inp.recent_raw = _previous_state(session, p.asset_id, model_version_id, as_of, days)
+            inp.prev_letter, inp.recent_raw = sink.previous_state(session, p.asset_id, model_version_id, as_of, days)
             inp.regime = regime
             result = grade(inp, config)
             report.add(f"status_{result.status}")
-            rows.append(snapshot_row(p, inp, peers, result, model_version_id, as_of, knowledge))
+            rows.append(sink.row(snapshot_row(p, inp, peers, result, model_version_id, as_of, knowledge)))
         if rows:
-            stmt = insert(GradeSnapshot).values(rows).on_conflict_do_nothing(
-                index_elements=["asset_id", "as_of", "model_version_id"])
-            added = session.execute(stmt.returning(GradeSnapshot.id)).all()
-            report.add("snapshots_added", len(added))
+            t = sink.table
+            keys = ["asset_id", "as_of", "model_version_id"] if sink.live else ["run_id", "asset_id", "as_of"]
+            added = 0
+            for i in range(0, len(rows), 500):
+                stmt = insert(t).values(rows[i:i + 500]).on_conflict_do_nothing(index_elements=keys)
+                added += len(session.execute(stmt.returning(t.id)).all())
+            report.add("snapshots_added", added)
         session.commit()
 
 

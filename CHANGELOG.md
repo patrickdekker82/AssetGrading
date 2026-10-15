@@ -1,5 +1,68 @@
 # Changelog
 
+## Fase 8 – Uitkomsten, terugtest en pagina Model (2026-10-15)
+
+### Gebouwd
+
+- **Uitkomstlabels** (`outcome`, append-only): per maandeinde-grade het totaalrendement in euro na 1, 3, 6
+  en 12 maanden, het rendement boven de benchmark van de klasse (`config/evaluation.yaml`: Bitcoin voor
+  crypto, S&P 500 of AEX voor aandelen, MSCI World voor ETF's en indices, het klassegemiddelde voor
+  obligaties en grondstoffen, geen benchmark voor valutaparen) en de grootste tussentijdse daling. Alleen
+  afgesloten periodes; een prijs ouder dan 7 dagen aan begin of eind telt niet.
+- **Maandelijkse meting** (`evaluation`, append-only), per modelversie, sjabloon en horizon:
+  rangcorrelatie per maand (gemiddelde, spreiding, deel boven nul), rendement boven de benchmark per letter
+  met 95%-interval, verschil A min F, toets op de volgorde A tot F, deel dat de benchmark versloeg en
+  grootste daling per letter, rangcorrelatie per pijler en samenhang tussen pijlers, wisselingen van
+  letters, splitsing naar marktregime en het aantal grote missers. Alle t-waarden met Newey-West (vertraging
+  horizon min één maand), en pas vanaf 6 maanden. Draait de 2e van elke maand op live grades.
+- **Tijdvaste terugtest** (`backtest_run`, `backtest_snapshot`): dezelfde gradingcode als live, maand voor
+  maand, met als peilmoment het einde van de maandeinddag. Feiten en macroreeksen tellen alleen als hun
+  `available_at` daarvoor ligt (SEC-cijfers vanaf de indieningsdatum), koersen tot en met die dag, en het
+  marktregime wordt per maand opnieuw berekend uit wat toen bekend was. Grades van de terugtest staan in een
+  eigen tabel en komen nooit in de live staat van dienst. Hervatten na een onderbreking kan.
+- **IJking van de lettergrenzen**: per sjabloon grenzen op de doelverdeling (10% A, 20% B, 40% C, 20% D,
+  10% F) uit de terugtestscores, alleen met minstens 24 maanden en 300 waarnemingen. Het resultaat is een
+  voorstel; de engine kent nu een letterschaal per sjabloon, maar die wordt pas gebruikt als de eigenaar
+  het voorstel goedkeurt en de nieuwe modelversie vastlegt (`apply-proposal`).
+- **Pagina Model**: bovenaan alleen de live staat van dienst met de stand "onvoldoende data" (minder dan
+  12 maanden met uitkomst), daaronder openstaande voorstellen met Goedkeuren en Afwijzen, en daaronder,
+  apart en met stippellijn en waarschuwing, de terugtest met per sjabloon de dekking in maanden en assets.
+  Horizon kiesbaar (1, 3, 6, 12 maanden).
+- Nieuwe begrippen in de woordenlijst: overrendement, t-waarde, ijking, grote misser, wisselingen.
+
+### Acceptatie
+
+- **Geen toekomstige data**: test met een bewust verschoven feit. Alle SEC-cijfers van een aandeel worden
+  opnieuw "ingediend" met vijf keer zo hoge waarden, één dag na het maandeinde, plus een koers van tien
+  keer zo hoog op de dag erna. De terugtestgrade van die maand blijft exact gelijk (invoer en uitkomst).
+  Met een peilmoment na die indiening verandert hij wel, dus het feit telt mee zodra het bekend is.
+- **Rapport per sjabloon met dekking in maanden en assets**: terugtest 2010-01 tot 2026-09 (201
+  maandeinden, 62.109 grades, 135.445 uitkomsten). Bijvoorbeeld Aandeel algemeen 200 maanden en 76 assets,
+  Valutapaar 201 maanden en 30 assets, Platform 110 maanden en 9 assets. Obligaties, REIT's, RWA- en
+  utility-tokens, memecoins en stablecoins hebben geen bruikbare terugtest: hun kenmerken zijn pas nu
+  ingevoerd (CSV) of de groep is te klein.
+- **Terugtest en live gescheiden**: aparte tabellen, en op de pagina Model elk een eigen blok met label.
+  Live staat op "onvoldoende data" (0 van 12 maanden).
+
+### Wat de terugtest laat zien (startgewichten, modelversie 0.5.0)
+
+- Bij geen enkel sjabloon voorspelt de score aantoonbaar het latere rendement: geen t-waarde komt boven 3.
+- Bij Aandeel algemeen (12 maanden: rangcorrelatie −0,09, t −3,5), Valutapaar (−0,14, t −3,1) en Grondstof
+  (−0,08, t −2,7) is het verband omgekeerd. Bij aandelen haalde F een mediaan van +15% boven de S&P 500,
+  B −1%. Een deel daarvan is overlevingsbias: de lijst bevat de huidige grote bedrijven, dus de winnaars
+  van de afgelopen jaren. Hoe hiermee om te gaan hoort bij fase 9 (leerlus), niet bij een stille aanpassing.
+- IJkingsvoorstel 3 staat open voor 9 sjablonen met genoeg data. Het verandert alleen de verdeling van de
+  letters, niet de volgorde.
+
+### Gevonden en hersteld
+
+- Crypto: de Coinbase-volumereeks werd ongesorteerd opgebouwd, waardoor een datumselectie kon mislukken
+  (in de terugtest: juni 2025). Ook live had dit kunnen gebeuren. Geen invloed op bestaande grades
+  (verify: 771/771 exact gelijk).
+- Uitkomsten tellen niet bij een koers van nul of lager (WTI april 2020) of, buiten crypto, bij een dagsprong
+  groter dan factor 5. Dat laatste vond vijf Londense ETC's met een eenhedenwissel op 3 januari 2012 (en
+  HOGS.L in 2017) in de Yahoo-koersen; die koersreeksen zelf zijn nog niet hersteld.
+
 ## Fase 7 – Toelichting, volglijst en bronnen (2026-10-14)
 
 ### Gebouwd

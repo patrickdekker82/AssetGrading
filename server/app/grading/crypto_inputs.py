@@ -92,9 +92,12 @@ def load_crypto_data(session: Session, as_of: date, knowledge: datetime, history
         """
         SELECT asset_id, ts, volume * close_eur AS volume_eur FROM price_bar_eur
         WHERE source = 'coinbase' AND ts <= :d AND ts > :d - 40 AND volume IS NOT NULL AND close_eur IS NOT NULL
+        ORDER BY asset_id, ts
         """
     ), session.connection(), params=params)
-    coinbase_volume = {int(k): g.set_index("ts")["volume_eur"].astype(float) for k, g in vol.groupby("asset_id")}
+    # Sorted: a date-range slice on an unsorted index fails (found by the backtest).
+    coinbase_volume = {int(k): g.set_index("ts")["volume_eur"].astype(float).sort_index()
+                       for k, g in vol.groupby("asset_id")}
 
     facts = pd.read_sql(text(
         """

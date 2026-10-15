@@ -134,6 +134,13 @@ class PegSafety(Strict):
     factors: list[str] = Field(min_length=1)
 
 
+def check_letter_scale(v: dict[str, float]) -> dict[str, float]:
+    order = [v[k] for k in ("A", "B", "C", "D", "F")]
+    if order != sorted(order, reverse=True) or len(set(order)) != 5 or v["F"] != 0:
+        raise ValueError("letter_scale must strictly descend from A to F, with F at 0")
+    return v
+
+
 class Template(Strict):
     id: str
     name_nl: str
@@ -162,6 +169,13 @@ class Template(Strict):
     show_underlying_timing: bool = False
     mirror_pairs: bool = False
     flag_macro_price_divergence: bool = False
+    # Calibrated lower bounds per letter for this template (phase 8); absent: the global letter_scale.
+    letter_scale: dict[Literal["A", "B", "C", "D", "F"], float] | None = None
+
+    @field_validator("letter_scale")
+    @classmethod
+    def scale_descends(cls, v: dict[str, float] | None) -> dict[str, float] | None:
+        return None if v is None else check_letter_scale(v)
     safety_params: dict[str, float] = {}
 
     @model_validator(mode="after")
@@ -307,10 +321,7 @@ class ModelSettings(Strict):
     @field_validator("letter_scale")
     @classmethod
     def descending(cls, v: dict[str, float]) -> dict[str, float]:
-        order = [v[k] for k in ("A", "B", "C", "D", "F")]
-        if order != sorted(order, reverse=True) or len(set(order)) != 5 or v["F"] != 0:
-            raise ValueError("letter_scale must strictly descend from A to F, with F at 0")
-        return v
+        return check_letter_scale(v)
 
 
 class TechnicalBlock(Strict):

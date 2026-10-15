@@ -38,6 +38,11 @@ class ModelConfig:
     def version(self) -> str:
         return self.settings.version
 
+    def letter_scale_for(self, template_id: str) -> dict[str, float]:
+        """The template's calibrated letter bounds, or the global provisional ones."""
+        t = self.templates.get(template_id)
+        return (t.letter_scale if t is not None and t.letter_scale else None) or self.settings.letter_scale
+
     def templates_for_tab(self, tab: str) -> list[Template]:
         return [t for t in self.templates.values() if t.tab == tab]
 

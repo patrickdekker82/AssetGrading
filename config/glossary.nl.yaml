@@ -129,6 +129,21 @@ terms:
   gecorrigeerde_koers:
     label: Gecorrigeerde koers
     uitleg: Koersen in de grafiek en voor momentum zijn gecorrigeerd voor dividend en splitsingen, zodat een uitkering niet als koersdaling telt.
+  overrendement:
+    label: Overrendement
+    uitleg: Het rendement van een asset min dat van de benchmark van zijn klasse over dezelfde periode. Positief betekent dat de asset de benchmark versloeg.
+  t_waarde:
+    label: t-waarde
+    uitleg: Hoe ver een gemiddelde van nul ligt, gemeten in onzekerheid. Boven 2 is het waarschijnlijk geen toeval; het model eist voor wijzigingen minstens 3. Gerekend met Newey-West, omdat overlappende periodes elkaar beïnvloeden.
+  ijking:
+    label: IJking
+    uitleg: Het verschuiven van de lettergrenzen per sjabloon, zodat in de terugtest ongeveer 10% een A krijgt, 20% een B, 40% een C, 20% een D en 10% een F. Gebeurt alleen na akkoord van de eigenaar.
+  grote_misser:
+    label: Grote misser
+    uitleg: Een asset met een A of B die daarna meer dan 30% achterbleef bij de benchmark.
+  wisselingen:
+    label: Wisselingen
+    uitleg: Hoe vaak de letter van een asset van de ene maand op de volgende verandert. Veel wisselingen maken een grade minder bruikbaar.
 
 metrics:
   accruals:

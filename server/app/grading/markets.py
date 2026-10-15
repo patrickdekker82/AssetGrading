@@ -19,7 +19,7 @@ import pandas as pd
 from sqlalchemy import text
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.grading.crypto import Prepared, write_snapshots
+from app.grading.crypto import LIVE, Prepared, SnapshotSink, write_snapshots
 from app.grading.crypto_inputs import Metrics
 from app.grading.technical import tech_raw, tech_scores
 from app.ingest.report import Report
@@ -64,7 +64,8 @@ def _cats(raw: list | None) -> dict[str, str]:
     return out
 
 
-def load_market_data(session: Session, as_of: date, knowledge: datetime, model_version_id: int) -> MarketData:
+def load_market_data(session: Session, as_of: date, knowledge: datetime, model_version_id: int,
+                     sink: SnapshotSink = LIVE) -> MarketData:
     conn = session.connection()
     start = as_of - timedelta(days=365 * HISTORY_YEARS)
     p = {"d": as_of, "k": knowledge, "start": start, "v": model_version_id}
@@ -112,9 +113,9 @@ def load_market_data(session: Session, as_of: date, knowledge: datetime, model_v
              for sid, g in macro_rows.groupby("series_id")}
     snaps = {r.slug: {"letter": r.letter, "timing": r.timing, "score": r.score, "as_of": r.as_of}
              for r in session.execute(text(
-                 """
+                 f"""
                  SELECT DISTINCT ON (a.slug) a.slug, g.letter, g.timing, g.score, g.as_of
-                 FROM grade_snapshot g JOIN asset a ON a.id = g.asset_id
+                 FROM {sink.source_sql()} g JOIN asset a ON a.id = g.asset_id
                  WHERE a.asset_class = 'index' AND g.model_version_id = :v AND g.as_of <= :d
                  ORDER BY a.slug, g.as_of DESC
                  """), p)}
@@ -406,15 +407,15 @@ def prepare_bonds(data: MarketData, config: ModelConfig) -> list[Prepared]:
 # --- run ------------------------------------------------------------------------------------------
 
 def grade_markets(sf: sessionmaker[Session], config: ModelConfig, model_version_id: int, markets: MarketsConfig,
-                  as_of: date, knowledge: datetime | None = None) -> Report:
+                  as_of: date, knowledge: datetime | None = None, sink: SnapshotSink = LIVE) -> Report:
     """Indices first (ETFs show the Timing of their index), then ETFs and bond ETFs."""
     report = Report()
     knowledge = knowledge or datetime.now(UTC)
     with sf() as session:
-        data = load_market_data(session, as_of, knowledge, model_version_id)
-    write_snapshots(sf, prepare_indices(data, config), config, model_version_id, as_of, knowledge, report)
+        data = load_market_data(session, as_of, knowledge, model_version_id, sink)
+    write_snapshots(sf, prepare_indices(data, config), config, model_version_id, as_of, knowledge, report, sink)
     with sf() as session:
-        data = load_market_data(session, as_of, knowledge, model_version_id)
-    write_snapshots(sf, prepare_etfs(data, config, markets), config, model_version_id, as_of, knowledge, report)
-    write_snapshots(sf, prepare_bonds(data, config), config, model_version_id, as_of, knowledge, report)
+        data = load_market_data(session, as_of, knowledge, model_version_id, sink)
+    write_snapshots(sf, prepare_etfs(data, config, markets), config, model_version_id, as_of, knowledge, report, sink)
+    write_snapshots(sf, prepare_bonds(data, config), config, model_version_id, as_of, knowledge, report, sink)
     return report

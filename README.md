@@ -174,6 +174,26 @@ kosten, rolopbrengst). Een valutapaar krijgt een richtingsscore: lang de eerste 
 Elk paar staat er in beide richtingen; EUR/USD en USD/EUR zijn elkaars spiegelbeeld (de scores tellen op
 tot 100).
 
+### Model, terugtest en ijking
+
+De pagina **Model** toont eerst de staat van dienst: alleen live grades, gemeten tegen wat daarna gebeurde
+(uitkomsten na 1, 3, 6 en 12 maanden, tegen de benchmark uit `config/evaluation.yaml`). Zolang er minder dan
+12 maanden met een uitkomst zijn, staat daar "onvoldoende data". De maandelijkse meting draait op de 2e van
+elke maand.
+
+Daaronder, apart en altijd gelabeld, de **terugtest**: het model maand voor maand toegepast op het verleden
+met alleen de data die aan het eind van die dag bekend was. Per sjabloon staat erbij hoeveel maanden en
+assets hij dekt. Een terugtest is herberekend, geen behaald resultaat.
+
+- **Terugtest draaien** (vanaf 2010, alle klassen; duurt ongeveer een uur):
+  `docker compose exec server python -m app.cli backtest` (of `backtest 2015-01 2020-12 stocks`).
+  Gestopt? `backtest resume <nummer>`.
+- **IJking**: na een terugtest stelt de app per sjabloon nieuwe lettergrenzen voor (10% A, 20% B, 40% C,
+  20% D, 10% F). Keur goed of af op de pagina Model. De server verandert het model nooit zelf; een
+  goedgekeurd voorstel leg je vast als nieuwe modelversie met
+  `docker compose run --rm -v ./config:/config server python -m app.cli apply-proposal <nummer>`
+  (de configuratie is in de containers alleen-lezen) en daarna `docker compose restart server`.
+
 ### ETF-kenmerken bijwerken
 
 Er is geen gratis bron met betrouwbare fondskenmerken. Werk daarom `config/etfs.csv` en
@@ -212,8 +232,8 @@ De app wordt in elf fases gebouwd (zie `CHANGELOG.md`). Na elke fase volgt een a
 | 4 | Aandelen | Klaar |
 | 5 | ETF's, obligaties, indices en marktregime | Klaar |
 | 6 | Grondstoffen en valuta | Klaar |
-| 7 | Toelichting, volglijst en bronnen | Klaar, wacht op akkoord |
-| 8 | Uitkomsten, terugtest en pagina Model | |
+| 7 | Toelichting, volglijst en bronnen | Klaar |
+| 8 | Uitkomsten, terugtest en pagina Model | Klaar, wacht op akkoord |
 | 9 | Leerlus | |
 | 10 | Afronding | |
 

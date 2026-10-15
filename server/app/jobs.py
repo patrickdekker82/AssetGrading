@@ -53,6 +53,7 @@ class JobContext:
     ai: AiConfig | None = None
     labels: dict[str, str] | None = None     # metric labels from the glossary, for explanations
     llm_client: object | None = None         # None without an API key: template text only
+    evaluation: object | None = None         # EvaluationSettings (config/evaluation.yaml)
 
 
 def run_crypto_and_grade(c: JobContext) -> Report:
@@ -161,6 +162,34 @@ def run_explanations(c: JobContext) -> Report:
     return Explainer(c.sf, c.ai, c.model, c.model_version_id, c.labels or {}, c.llm_client).run()
 
 
+def run_evaluation(c: JobContext) -> Report:
+    """Monthly measurement on live grades: outcomes that became known, then a new report (chapter 8)."""
+    if c.model is None or c.model_version_id is None or c.evaluation is None:
+        report = Report()
+        report.error("Geen model- of evaluatieconfiguratie geladen.")
+        return report
+    from app.evaluation.backtest import evaluate_live
+
+    return evaluate_live(c.sf, c.evaluation, c.model, c.model_version_id)
+
+
+def run_backtest(c: JobContext) -> Report:
+    """The full point-in-time backtest with the settings of config/evaluation.yaml (takes hours)."""
+    if c.model is None or c.model_version_id is None or c.evaluation is None:
+        report = Report()
+        report.error("Geen model- of evaluatieconfiguratie geladen.")
+        return report
+    from app.evaluation.backtest import Backtest
+
+    bt_cfg = c.evaluation.raw["backtest"]
+    start = date.fromisoformat(bt_cfg["start"] + "-01")
+    bt = Backtest(c.sf, c.model, c.model_version_id, c.evaluation, date.fromisoformat(c.cfg.crypto.history_start),
+                  c.stocks, c.markets, c.commodities)
+    run_id, report = bt.run(start, datetime.now(UTC).date(), list(bt_cfg["classes"]))
+    report.notes.insert(0, f"Terugtest {run_id}")
+    return report
+
+
 def last_trading_day(now: datetime) -> date:
     """The last weekday whose US session has closed (21:00 UTC covers both summer and winter time)."""
     day = now.date() if now.hour >= 21 else now.date() - timedelta(days=1)
@@ -176,6 +205,8 @@ JOBS: dict[str, Callable[[JobContext], Report]] = {
     "commodities": run_commodities_and_grade,
     "fx_macro": lambda c: run_fx_macro(c.sf, c.providers, c.cfg),
     "explanations": run_explanations,
+    "evaluation": run_evaluation,
+    "backtest": run_backtest,
     "prune_raw": lambda c: run_prune(c.sf, c.cfg),
 }
 
@@ -186,6 +217,8 @@ JOB_LABELS_NL = {
     "commodities": "Grondstoffen, ETC's en valuta",
     "fx_macro": "Wisselkoersen en macro",
     "explanations": "Toelichtingen (taalmodel, batch)",
+    "evaluation": "Maandelijkse meting (live uitkomsten)",
+    "backtest": "Terugtest (alle klassen, duurt uren)",
     "prune_raw": "Opruimen ruwe antwoorden",
 }
 
@@ -264,7 +297,8 @@ def _execute(ctx: JobContext, name: str, trigger: str) -> JobRun:
 
 def schedule_jobs(scheduler: BaseScheduler, ctx: JobContext) -> None:
     mapping = {"crypto": ["crypto"], "stocks": ["stocks"], "markets": ["markets"], "commodities": ["commodities"],
-               "fx_macro": ["fx_macro"], "explanations": ["explanations"], "prune_raw": ["prune_raw"]}
+               "fx_macro": ["fx_macro"], "explanations": ["explanations"], "prune_raw": ["prune_raw"],
+               "evaluation": ["evaluation"]}
     for key, expr in ctx.cfg.schedule.items():
         for job in mapping.get(key, []):
             scheduler.add_job(

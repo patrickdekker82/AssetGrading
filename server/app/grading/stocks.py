@@ -17,7 +17,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.grading.assign import assign_stock
-from app.grading.crypto import Prepared, write_snapshots
+from app.grading.crypto import LIVE, Prepared, SnapshotSink, write_snapshots
 from app.grading.crypto_inputs import Metrics
 from app.grading.fundamentals import (
     FactTable,
@@ -347,11 +347,11 @@ def _technical(items: list[StockPrepared], data: StockData, config: ModelConfig)
 
 
 def grade_stocks(sf: sessionmaker[Session], config: ModelConfig, model_version_id: int, stocks_cfg: StocksConfig,
-                 as_of: date, knowledge: datetime | None = None) -> Report:
+                 as_of: date, knowledge: datetime | None = None, sink: SnapshotSink = LIVE) -> Report:
     report = Report()
     knowledge = knowledge or datetime.now(UTC)
     with sf() as session:
         data = load_stock_data(session, stocks_cfg, as_of, knowledge)
     prepared = prepare(data, config)
-    write_snapshots(sf, prepared, config, model_version_id, as_of, knowledge, report)
+    write_snapshots(sf, prepared, config, model_version_id, as_of, knowledge, report, sink)
     return report

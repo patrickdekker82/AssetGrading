@@ -271,7 +271,7 @@ def _weighted(inp: GradeInput, template: Template, config: ModelConfig) -> Grade
     timing = None if tech is None or tech.value is None else float(tech.value)
     status = _status(coverage, config) if score is not None else "no_grade"
     gates = _evaluate_gates(template, inp, pillars)
-    scale = config.settings.letter_scale
+    scale = config.letter_scale_for(template.id)
     stab = config.settings.stability
 
     if score is None:
@@ -344,8 +344,8 @@ def _product(inp: GradeInput, template: Template, config: ModelConfig) -> GradeR
     if status == "no_grade":
         return GradeResult(template.id, "no_grade", score, score, None, coverage, None, None, None, None, None,
                            None, None, None, [], _no_grade_reason(coverage, [pillar], config), [pillar], gates, [])
-    raw = letter_for(score, config.settings.letter_scale)
-    held = apply_hysteresis(score, raw, inp.prev_letter, inp.recent_raw, config.settings.letter_scale,
+    raw = letter_for(score, config.letter_scale_for(template.id))
+    held = apply_hysteresis(score, raw, inp.prev_letter, inp.recent_raw, config.letter_scale_for(template.id),
                             config.settings.stability.hysteresis_points, config.settings.stability.hysteresis_days)
     letter, labels = _apply_gates(held, gates, product_template)
     if status == "provisional":

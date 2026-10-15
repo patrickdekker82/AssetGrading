@@ -168,3 +168,19 @@ def test_grades_rows_carry_sparkline_and_links(client):
     rows = client.get("/api/grades?tab=crypto").json()["rows"]
     btc = next(r for r in rows if r["id"] == "bitcoin")
     assert len(btc["spark"]) == 30 and btc["asset_class"] == "crypto"
+
+
+def test_model_page_keeps_live_and_backtest_apart(client):
+    from app.db import get_engine
+
+    d = client.get("/api/model/performance").json()
+    assert d["live"]["insufficient"] is True and d["live"]["months_with_outcomes"] == 0
+    assert d["backtest"]["report"] is None and "Geen behaald resultaat" in d["backtest"]["label"]
+    with get_engine().begin() as conn:
+        pid = conn.execute(text(
+            """INSERT INTO model_proposal (kind, model_version_id, summary_nl, payload, evidence)
+               SELECT 'letter_scale', max(id), 'test', '{}', '{}' FROM model_version RETURNING id""")).scalar()
+    assert client.get("/api/model/proposals").json()[0]["status"] == "open"
+    assert client.post(f"/api/model/proposals/{pid}/reject").json()["status"] == "rejected"
+    assert client.post(f"/api/model/proposals/{pid}/approve").status_code == 409     # decided is decided
+    assert client.post("/api/model/proposals/999999/approve").status_code == 404

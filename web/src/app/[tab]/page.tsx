@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import type { GradeRow } from "@/components/GradeBadge";
+import { HORIZONS, ModelPerformance } from "@/components/ModelPerformance";
 import { RankingTable as RankingTableLive } from "@/components/RankingTable";
 import { Term } from "@/components/Term";
 import { fetchServer } from "@/lib/server";
@@ -16,7 +17,7 @@ type TabInfo = {
   template_names: string[];
 };
 
-type Props = { params: Promise<{ tab: string }> };
+type Props = { params: Promise<{ tab: string }>; searchParams: Promise<{ h?: string }> };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { tab } = await params;
@@ -24,8 +25,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return { title: label ? `${label} · Graadmeter` : "Graadmeter" };
 }
 
-export default async function TabPage({ params }: Props) {
+export default async function TabPage({ params, searchParams }: Props) {
   const { tab } = await params;
+  const { h } = await searchParams;
   if (!isTabSlug(tab)) notFound();
   const label = TABS.find((t) => t.slug === tab)!.label;
   const tabs = await fetchServer<TabInfo[]>("/api/tabs");
@@ -48,8 +50,7 @@ export default async function TabPage({ params }: Props) {
       {tab === "indices" && <RegimeCard />}
       {tab === "bonds" && <RatesCard />}
       {tab === "model" ? (
-        <EmptyState phase={info?.phase ?? 8}
-          text="Hier verschijnt de staat van dienst van het model: rendement per letter tegen de benchmark, de rangcorrelatie per maand en openstaande voorstellen. Live resultaten en terugtest staan altijd gescheiden." />
+        <ModelPerformance horizon={HORIZONS.includes(Number(h)) ? Number(h) : 6} />
       ) : (
         <Ranking tab={tab} phase={info?.phase ?? 1} />
       )}
