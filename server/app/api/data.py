@@ -92,21 +92,36 @@ def start_job(name: str, request: Request) -> dict:
     return {"started": name}
 
 
+_coverage_cache: dict[str, tuple[float, dict]] = {}
+COVERAGE_CACHE_SECONDS = 600     # the counts change with the nightly runs only; the query takes seconds
+
+
 @router.get("/data/coverage")
 def coverage(request: Request) -> dict:
     """How much data each asset class has; used to check the phase 1 acceptance criteria."""
+    import time
+
+    hit = _coverage_cache.get("all")
+    if hit and time.monotonic() - hit[0] < COVERAGE_CACHE_SECONDS:
+        return hit[1]
+    result = _coverage(request)
+    _coverage_cache["all"] = (time.monotonic(), result)
+    return result
+
+
+def _coverage(request: Request) -> dict:
     sf = request.app.state.jobs.sf
     with sf() as session:
         crypto = session.execute(text(
             """
             WITH latest AS (
                 SELECT max(as_of) AS as_of FROM universe_membership WHERE universe = 'crypto_top'
-            ), list AS (
+            ), list AS MATERIALIZED (
                 SELECT m.asset_id FROM universe_membership m, latest
                 WHERE m.universe = 'crypto_top' AND m.as_of = latest.as_of AND m.included
-            ), eur AS (
+            ), eur AS MATERIALIZED (
                 SELECT asset_id, min(ts) AS first_day, max(ts) AS last_day, count(DISTINCT ts) AS days
-                FROM price_daily_eur GROUP BY asset_id
+                FROM price_daily_eur WHERE asset_id IN (SELECT asset_id FROM list) GROUP BY asset_id
             )
             SELECT (SELECT as_of FROM latest) AS list_date,
                    count(*) AS list_size,
@@ -118,13 +133,18 @@ def coverage(request: Request) -> dict:
         )).mappings().one()
         missing = session.execute(text(
             """
-            WITH latest AS (SELECT max(as_of) AS as_of FROM universe_membership WHERE universe = 'crypto_top')
-            SELECT a.name, a.symbol, a.price_sources,
-                   (SELECT count(*) FROM price_daily_eur e WHERE e.asset_id = a.id) AS days,
-                   (SELECT min(ts) FROM price_daily_eur e WHERE e.asset_id = a.id) AS first_day
-            FROM universe_membership m JOIN latest ON m.as_of = latest.as_of JOIN asset a ON a.id = m.asset_id
-            WHERE m.universe = 'crypto_top' AND m.included
-            ORDER BY m.rank
+            WITH latest AS (SELECT max(as_of) AS as_of FROM universe_membership WHERE universe = 'crypto_top'),
+            list AS MATERIALIZED (
+                SELECT m.asset_id, m.rank FROM universe_membership m JOIN latest ON m.as_of = latest.as_of
+                WHERE m.universe = 'crypto_top' AND m.included
+            ), eur AS MATERIALIZED (
+                -- One pass over the euro view for the listed coins only (per-row subqueries took seconds).
+                SELECT asset_id, count(*) AS days, min(ts) AS first_day FROM price_daily_eur
+                WHERE asset_id IN (SELECT asset_id FROM list) GROUP BY asset_id
+            )
+            SELECT a.name, a.symbol, a.price_sources, coalesce(eur.days, 0) AS days, eur.first_day
+            FROM list JOIN asset a ON a.id = list.asset_id LEFT JOIN eur ON eur.asset_id = list.asset_id
+            ORDER BY list.rank
             """
         )).mappings().all()
         counts = session.execute(text(
@@ -146,7 +166,7 @@ def coverage(request: Request) -> dict:
 @router.get("/ai/usage")
 def ai_usage(request: Request) -> dict:
     """Language-model use this month against the hard budget (chapter 9), for the settings page."""
-    from app.ai.explanation import month_start
+    from app.ai.explanation import month_start, usd_per_eur
 
     ai = request.app.state.ai_config
     jobs = request.app.state.jobs
@@ -171,17 +191,21 @@ def ai_usage(request: Request) -> dict:
                   ORDER BY asset_id, created_at DESC, id DESC) e
             """), {"v": jobs.model_version_id}).mappings().one()
     spent = sum(float(c["cost"]) for c in calls)
+    with jobs.sf() as session:
+        rate = usd_per_eur(session)
     return {
         "month": start.strftime("%Y-%m"),
         "key_configured": jobs.llm_client is not None,
-        "budget_usd": ai.monthly_budget_usd,
-        "spent_usd": round(spent, 4),
-        "reserved_usd": round(float(reserved[0]), 4),
+        # Billed in dollars, shown and budgeted in euro (design rule 6).
+        "budget_eur": ai.monthly_budget_eur,
+        "spent_eur": round(spent / rate, 4),
+        "reserved_eur": round(float(reserved[0]) / rate, 4),
+        "usd_per_eur": rate,
         "pending_batches": int(reserved[1]),
         "components": [{"component": "explanation", "label_nl": "Toelichting", "model": ai.explanation.model,
                         "prompt_version": ai.explanation.prompt_version, "batch": True,
                         "regenerate_shift_points": ai.explanation.regenerate_shift_points}],
-        "calls": [{**dict(c), "cost": round(float(c["cost"]), 4)} for c in calls],
+        "calls": [{**dict(c), "cost": round(float(c["cost"]) / rate, 4)} for c in calls],
         "explanations": {"model": int(shown["model"] or 0), "template_after_check": int(shown["template"] or 0)},
     }
 

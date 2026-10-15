@@ -196,9 +196,8 @@ def _regime() -> int:
     import json
     from datetime import UTC, datetime
 
-    from app.grading.regime import update_regime
+    from app.grading.regime import REGIME_START, update_regime
     from app.ingest.report import Report
-    from app.jobs import REGIME_START
 
     _, sf, config, version_id = _context()
     report = Report()

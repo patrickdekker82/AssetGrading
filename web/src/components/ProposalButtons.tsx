@@ -4,7 +4,8 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 // Approve or reject a model proposal. Only records the owner's decision; nothing changes automatically.
-export function ProposalButtons({ id, approveLabel = "Goedkeuren" }: { id: number; approveLabel?: string }) {
+export function ProposalButtons({ id, approveLabel = "Goedkeuren", rejectOnly = false }:
+  { id: number; approveLabel?: string; rejectOnly?: boolean }) {
   const router = useRouter();
   const [state, setState] = useState<"idle" | "busy" | "error">("idle");
   const [message, setMessage] = useState<string | null>(null);
@@ -31,7 +32,9 @@ export function ProposalButtons({ id, approveLabel = "Goedkeuren" }: { id: numbe
 
   return (
     <div className="proposal-actions">
-      <button className="button" onClick={() => decide("approve")} disabled={state === "busy"}>{approveLabel}</button>
+      {!rejectOnly && (
+        <button className="button" onClick={() => decide("approve")} disabled={state === "busy"}>{approveLabel}</button>
+      )}
       <button className="button" onClick={() => decide("reject")} disabled={state === "busy"}>Afwijzen</button>
       {state === "error" && <span className="warn-text small">{message ?? "Mislukt"}</span>}
     </div>

@@ -84,7 +84,16 @@ def _matches(vals: set[float], allowed: set[float]) -> bool:
     return any(abs(v - a) < 1e-9 for v in vals for a in allowed)
 
 
-def check_text(text: str, payload: dict, min_words: int = 0, max_words: int = 10_000) -> list[str]:
+def forbidden_pattern(words: list[str] | None) -> re.Pattern:
+    """The fixed forms plus every word from the model configuration (forbidden_words_nl) and its inflections."""
+    if not words:
+        return FORBIDDEN
+    extra = "|".join(re.escape(w.lower()) + r"\w*" for w in words if w.strip())
+    return re.compile(FORBIDDEN.pattern[:-3] + "|" + extra + r")\b", re.IGNORECASE)
+
+
+def check_text(text: str, payload: dict, min_words: int = 0, max_words: int = 10_000,
+               forbidden: list[str] | None = None) -> list[str]:
     """Problems with a generated text, in Dutch; an empty list means the text passes."""
     problems: list[str] = []
     allowed = allowed_values(payload)
@@ -98,7 +107,7 @@ def check_text(text: str, payload: dict, min_words: int = 0, max_words: int = 10
     words = len(text.split())
     if not min_words <= words <= max_words:
         problems.append(f"{words} woorden, verwacht {min_words} tot {max_words}")
-    hit = sorted({m.group(0).lower() for m in FORBIDDEN.finditer(text)})
+    hit = sorted({m.group(0).lower() for m in forbidden_pattern(forbidden).finditer(text)})
     if hit:
         problems.append("verboden woorden: " + ", ".join(hit))
     return problems

@@ -30,7 +30,7 @@ class ComponentSettings:
 @dataclass(frozen=True)
 class AiConfig:
     api_key_env: str
-    monthly_budget_usd: float
+    monthly_budget_eur: float
     pricing: dict[str, dict[str, float]]
     cache_write_factor: float
     cache_read_factor: float
@@ -60,7 +60,7 @@ def load_ai_config(path: Path) -> AiConfig:
                                           {k: v for k, v in c.items() if k not in base})
                   for name, c in raw["components"].items()}
     return AiConfig(
-        api_key_env=raw["api_key_env"], monthly_budget_usd=float(raw["monthly_budget_usd"]),
+        api_key_env=raw["api_key_env"], monthly_budget_eur=float(raw["monthly_budget_eur"]),
         pricing={k: {"input": float(v["input"]), "output": float(v["output"])} for k, v in raw["pricing"].items()},
         cache_write_factor=float(raw["cache_write_factor"]), cache_read_factor=float(raw["cache_read_factor"]),
         batch_discount=float(raw["batch_discount"]),

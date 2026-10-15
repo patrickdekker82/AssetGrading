@@ -151,7 +151,7 @@ Met een sleutel:
 - kun je op een assetpagina een document laten lezen (kwalitatieve kenmerken).
 
 Een taalmodel levert nooit cijfers voor een grade en verandert nooit iets aan het model. Het maandbudget
-(standaard 5 dollar, in `config/ai.yaml`) is een harde stop; het verbruik staat onder **Instellingen**.
+(standaard 5 euro, omgerekend tegen de laatste ECB-koers, in `config/ai.yaml`) is een harde stop; het verbruik staat onder **Instellingen**.
 
 ## 9. De pagina Model
 

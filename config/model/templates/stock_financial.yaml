@@ -44,6 +44,6 @@ gates:
     kind: metric_threshold
     metric: cet1_buffer
     op: "<"
-    value: 1.0
+    value: 0.01                  # ratio unit, like the metric: 1 percentage point
     cap: C
     reason_nl: De CET1-ruimte boven de toezichtseis is kleiner dan 1 procentpunt.

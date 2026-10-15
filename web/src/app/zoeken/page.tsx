@@ -7,10 +7,10 @@ import { tabForClass } from "@/lib/tabs";
 export const metadata: Metadata = { title: "Zoeken · Graadmeter" };
 
 type Local = { id: string; name: string; ticker: string; asset_class: string; tracked: boolean; letter: string | null;
-  status: string | null };
+  status: string | null; coverage: number | null; as_of: string | null };
 type Remote = { id: string; name: string; symbol: string; market_cap_rank: number | null; platform?: string;
   source: "coingecko" | "sec" };
-type Result = { local: Local[]; remote: Remote[]; message: string | null };
+type Result = { local: Local[]; remote: Remote[]; message: string | null; model_version?: string };
 
 export default async function SearchPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
   const { q = "" } = await searchParams;
@@ -36,7 +36,12 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
                       <Link href={`/${tabForClass(r.asset_class)}/${r.id}`}>{r.name}</Link>
                     ) : <span>{r.name}</span>}
                     <span className="muted"> {r.ticker}</span>
-                    {r.letter && <span className="grade-inline"> · {r.letter}</span>}
+                    {r.letter && (
+                      // Never a grade without coverage, model version and as-of date (chapter 11).
+                      <span className="grade-inline"> · {r.letter}
+                        <span className="muted small"> (dekking {Math.round((r.coverage ?? 0) * 100)}%, peildatum{" "}
+                          {r.as_of}, model {result.model_version})</span></span>
+                    )}
                     {!r.tracked && r.asset_class === "crypto" && <FetchButton coingeckoId={r.id} name={r.name} />}
                   </li>
                 ))}

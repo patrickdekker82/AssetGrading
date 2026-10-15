@@ -37,7 +37,7 @@ export default async function TabPage({ params, searchParams }: Props) {
     <section>
       <div className="page-head">
         <h1>{label}</h1>
-        {info?.size ? <span className="chip">Top {info.size}</span> : null}
+        {info?.size && (tab === "crypto" || tab === "stocks") ? <span className="chip">Top {info.size}</span> : null}
       </div>
       {info ? <p className="lead">{info.description_nl}</p> : <ServerDown />}
 

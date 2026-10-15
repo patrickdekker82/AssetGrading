@@ -12,6 +12,8 @@ from sqlalchemy.dialects.postgresql import insert
 
 from app.ai.explanation import Snapshot, shown_explanation
 from app.charting.indicators import (
+    BOND_DEFAULT_ON,
+    BOND_INDICATORS,
     COMMODITY_DEFAULT_ON,
     COMMODITY_INDICATORS,
     CRYPTO_INDICATORS,
@@ -23,6 +25,7 @@ from app.charting.indicators import (
     STOCK_DEFAULT_ON,
     STOCK_INDICATORS,
     aggregate_ohlc,
+    bond_indicators,
     commodity_indicators,
     daily_indicators,
     fx_indicators,
@@ -135,7 +138,9 @@ def asset_detail(key: str, request: Request) -> dict:
         "data_notes": inputs.get("notes", []),
     }
     out["pillars"] = pillars
-    out["gates"] = res.get("gates", [])
+    # A pillar-agreement gate in mode "exact" sets the grade instead of capping it (fx "geen voordeel").
+    exact = {g.id for g in template.gates if getattr(g, "mode", None) == "exact"}
+    out["gates"] = [{**g, "sets_grade": g["id"] in exact} for g in res.get("gates", [])]
     snapshot = Snapshot(asset.id, asset.name, snap["as_of"], snap["model_version_id"], res, snap["status"],
                         snap["letter"], snap["score"], snap["peg_safety"])
     with jobs.sf() as session:
@@ -233,7 +238,23 @@ def _build_chart(key: str, interval: str, jobs) -> dict:
                 "ORDER BY date, available_at DESC"), {"s": f"CFTC_{cftc_code}"}).all()
             factor = sign if asset.asset_class == "fx" else 1
             macro["cftc"] = pd.Series([float(r[1]) * factor for r in rows], index=[r[0] for r in rows], dtype=float)
-        if asset.asset_class == "index":
+        def macro_series(sid: str) -> pd.Series:
+            rows = session.execute(text(
+                "SELECT DISTINCT ON (date) date, value FROM macro_observation WHERE series_id = :s "
+                "ORDER BY date, available_at DESC"), {"s": sid}).all()
+            return pd.Series([float(r[1]) for r in rows], index=[r[0] for r in rows], dtype=float)
+
+        if asset.asset_class == "fx" and jobs.commodities:
+            cur = jobs.commodities.currencies
+            base, quote = cats.get("base"), cats.get("quote")
+            if base in cur and quote in cur and cur[base].rates and cur[quote].rates:
+                # The 3-month interbank rate (last in the list) exists for every currency.
+                macro["rate_diff"] = (macro_series(cur[base].rates[-1]) - macro_series(cur[quote].rates[-1])).dropna()
+        if asset.asset_class == "bond":
+            macro["curve_us_2_10"] = macro_series("T10Y2Y")
+            macro["curve_us_3m_10"] = macro_series("T10Y3M")
+            macro["curve_ea_2_10"] = (macro_series("EA_AAA_10Y") - macro_series("EA_AAA_2Y")).dropna()
+        if asset.asset_class in ("index", "etf"):
             for sid in ("VIXCLS", "VXVCLS"):
                 rows = session.execute(text(
                     "SELECT DISTINCT ON (date) date, value FROM macro_observation WHERE series_id = :s "
@@ -262,8 +283,12 @@ def _build_chart(key: str, interval: str, jobs) -> dict:
         ind, defs, default_on = commodity_indicators(ohlc, macro.get("cftc")), COMMODITY_INDICATORS, \
             COMMODITY_DEFAULT_ON
     elif asset.asset_class == "fx":
-        ind, defs, default_on = fx_indicators(ohlc, macro.get("cftc")), FX_INDICATORS, FX_DEFAULT_ON
-    elif asset.asset_class in ("index", "etf", "bond", "reference"):
+        ind, defs, default_on = fx_indicators(ohlc, macro.get("cftc"), macro.get("rate_diff")), FX_INDICATORS, \
+            FX_DEFAULT_ON
+    elif asset.asset_class == "bond":
+        curves = {k: macro.get(k) for k in ("curve_us_2_10", "curve_us_3m_10", "curve_ea_2_10")}
+        ind, defs, default_on = bond_indicators(ohlc, curves), BOND_INDICATORS, BOND_DEFAULT_ON
+    elif asset.asset_class in ("index", "etf", "reference"):
         breadth = None
         if asset.asset_class == "index":
             breadth = _breadth_for(jobs, asset)
@@ -367,26 +392,27 @@ def search(request: Request, q: str) -> dict:
     with jobs.sf() as session:
         local = session.execute(text(
             """
-            SELECT DISTINCT a.slug AS id, a.name, a.symbol AS ticker, a.asset_class, a.tracked,
-                   (SELECT letter FROM grade_snapshot g WHERE g.asset_id = a.id AND g.model_version_id = :v
-                    ORDER BY as_of DESC LIMIT 1) AS letter,
-                   (SELECT status FROM grade_snapshot g WHERE g.asset_id = a.id AND g.model_version_id = :v
-                    ORDER BY as_of DESC LIMIT 1) AS status
-            FROM asset a LEFT JOIN asset_alias al ON al.asset_id = a.id
-            WHERE a.name ILIKE :like OR a.symbol ILIKE :q OR a.slug = :lower OR al.value = :q OR al.value = :upper
+            SELECT a.slug AS id, a.name, a.symbol AS ticker, a.asset_class, a.tracked,
+                   g.letter, g.status, g.coverage, g.as_of
+            FROM asset a
+            LEFT JOIN LATERAL (SELECT letter, status, coverage, as_of FROM grade_snapshot x
+                               WHERE x.asset_id = a.id AND x.model_version_id = :v
+                               ORDER BY as_of DESC LIMIT 1) g ON true
+            WHERE a.name ILIKE :like OR a.symbol ILIKE :q OR a.slug = :lower
+               OR EXISTS (SELECT 1 FROM asset_alias al WHERE al.asset_id = a.id AND al.value IN (:q, :upper))
             ORDER BY a.tracked DESC, a.name LIMIT 20
             """), {"like": f"%{q}%", "q": q, "lower": q.lower(), "v": jobs.model_version_id,
                    "upper": q.upper()}).mappings().all()
     local = [dict(r) for r in local]
     remote, message = [], None
     if any(r["tracked"] for r in local):
-        return {"local": local, "remote": [], "message": None}
+        return {"local": local, "remote": [], "message": None, "model_version": jobs.model.version}
     errors = []
     if ISIN.match(q.upper()):
         remote, message = _isin_lookup(jobs, q.upper(), local)
         tracked = _tracked_stocks(jobs, [r["id"] for r in remote if r.get("source") == "sec"])
         if tracked:
-            return {"local": tracked, "remote": [], "message": None}
+            return {"local": tracked, "remote": [], "message": None, "model_version": jobs.model.version}
     else:
         try:
             if EVM_ADDRESS.match(q) or (SOLANA_ADDRESS.match(q) and not q.isalpha()):
@@ -405,7 +431,7 @@ def search(request: Request, q: str) -> dict:
         message = "Zoeken lukte niet bij " + "; ".join(errors)
     if not local and not remote and message is None:
         message = "Deze asset staat in geen enkele bron. Er is daarom geen grade."
-    return {"local": local, "remote": remote, "message": message}
+    return {"local": local, "remote": remote, "message": message, "model_version": jobs.model.version}
 
 
 def _tracked_stocks(jobs, tickers: list[str]) -> list[dict]:
@@ -416,11 +442,11 @@ def _tracked_stocks(jobs, tickers: list[str]) -> list[dict]:
         return [dict(r) for r in session.execute(text(
             """
             SELECT a.slug AS id, a.name, a.symbol AS ticker, a.asset_class, a.tracked,
-                   (SELECT letter FROM grade_snapshot g WHERE g.asset_id = a.id AND g.model_version_id = :v
-                    ORDER BY as_of DESC LIMIT 1) AS letter,
-                   (SELECT status FROM grade_snapshot g WHERE g.asset_id = a.id AND g.model_version_id = :v
-                    ORDER BY as_of DESC LIMIT 1) AS status
+                   g.letter, g.status, g.coverage, g.as_of
             FROM asset a JOIN asset_alias al ON al.asset_id = a.id AND al.kind = 'us_ticker'
+            LEFT JOIN LATERAL (SELECT letter, status, coverage, as_of FROM grade_snapshot x
+                               WHERE x.asset_id = a.id AND x.model_version_id = :v
+                               ORDER BY as_of DESC LIMIT 1) g ON true
             WHERE al.value = ANY(:t) AND a.tracked
             """), {"t": tickers, "v": jobs.model_version_id}).mappings()]
 
@@ -549,7 +575,7 @@ def etf_peers(key: str, request: Request) -> dict:
             return {"group": None, "rows": []}
         rows = session.execute(text(
             """
-            SELECT DISTINCT ON (a.id) a.slug, a.name, a.categories, g.letter, g.status, g.score,
+            SELECT DISTINCT ON (a.id) a.slug, a.name, a.categories, g.letter, g.status, g.score, g.coverage,
                    g.inputs->'grade_input'->'metrics' AS metrics, g.inputs->'provenance' AS provenance, g.as_of
             FROM asset a JOIN grade_snapshot g ON g.asset_id = a.id AND g.model_version_id = :v
             WHERE a.asset_class = 'etf' AND a.categories @> CAST(:cat AS jsonb)
@@ -562,7 +588,7 @@ def etf_peers(key: str, request: Request) -> dict:
         td, ter = m.get("tracking_difference"), m.get("ongoing_charges")
         out.append({
             "id": r["slug"], "name": r["name"], "letter": r["letter"], "status": r["status"], "score": r["score"],
-            "tracking_difference": td, "ongoing_charges": ter,
+            "coverage": r["coverage"], "tracking_difference": td, "ongoing_charges": ter,
             "rest_after_costs": None if td is None or ter is None else td + ter,
             "fund_size": m.get("fund_size"), "domicile": cats.get("domicile"), "replication": cats.get("replication"),
             "distribution": cats.get("distribution"), "securities_lending": cats.get("securities_lending"),
@@ -570,7 +596,7 @@ def etf_peers(key: str, request: Request) -> dict:
         })
     out.sort(key=lambda x: -(x["score"] or 0))
     group_name = jobs.markets.index_groups[group].name if jobs.markets and group in jobs.markets.index_groups else group
-    return {"group": group_name, "rows": out}
+    return {"group": group_name, "rows": out, "model_version": jobs.model.version}
 
 
 
@@ -594,7 +620,7 @@ def commodity_products(key: str, request: Request) -> dict:
         rows = session.execute(text(
             f"""
             SELECT DISTINCT ON (a.id) a.slug, a.name, a.asset_class, a.categories, g.letter, g.status, g.score,
-                   g.inputs->'grade_input'->'metrics' AS metrics
+                   g.coverage, g.as_of, g.inputs->'grade_input'->'metrics' AS metrics
             FROM asset a JOIN grade_snapshot g ON g.asset_id = a.id AND g.model_version_id = :v
             WHERE {where}
             ORDER BY a.id, g.as_of DESC
@@ -604,8 +630,9 @@ def commodity_products(key: str, request: Request) -> dict:
         m = {k: (v or {}).get("value") for k, v in (r["metrics"] or {}).items()}
         c = dict(str(x).split(":", 1) for x in r["categories"] or [] if ":" in str(x))
         out.append({"id": r["slug"], "name": r["name"], "asset_class": r["asset_class"], "letter": r["letter"],
-                    "status": r["status"], "score": r["score"], "structure": c.get("structure"),
+                    "status": r["status"], "score": r["score"], "coverage": r["coverage"], "as_of": r["as_of"],
+                    "structure": c.get("structure"),
                     "collateralized": c.get("collateralized"), "ongoing_charges": m.get("ongoing_charges"),
                     "roll_yield_12m": m.get("roll_yield_12m"), "tracking_difference": m.get("tracking_difference")})
     out.sort(key=lambda x: -(x["score"] or 0))
-    return {"rows": out}
+    return {"rows": out, "model_version": jobs.model.version}

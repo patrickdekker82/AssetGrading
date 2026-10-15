@@ -17,7 +17,6 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from app.evaluation.proposals import next_version
 from app.learning.weights import Guardrails, check_weights
 from app.modelconfig import ModelConfig
 from app.modelconfig.loader import config_from_raw
@@ -82,11 +81,13 @@ def shadow_challengers(session: Session) -> list[tuple[ModelConfig, int, int]]:
 
 
 def _next_free_version(session: Session, base: str) -> str:
+    """A challenger takes the next free patch number of its champion (0.6.0 -> 0.6.1, 0.6.2, ...): the minor
+    numbers belong to the configuration files, so a later file release can never collide with a challenger."""
     taken = set(session.execute(text("SELECT version FROM model_version")).scalars())
-    v = next_version(base)
-    while v in taken:
-        v = next_version(v)
-    return v
+    major, minor, patch = (int(x) for x in base.split("."))
+    while f"{major}.{minor}.{patch}" in taken:
+        patch += 1
+    return f"{major}.{minor}.{patch}"
 
 
 def create_challenger(session: Session, proposal_id: int, champion: ModelConfig, champion_id: int,
@@ -116,9 +117,7 @@ def create_challenger(session: Session, proposal_id: int, champion: ModelConfig,
     for template_id, weights in payload.items():
         for pillar in raw["templates"][template_id]["pillars"]:
             pillar["weight"] = weights[pillar["id"]]
-    top = max(session.execute(text("SELECT version FROM model_version")).scalars(),
-              key=lambda v: tuple(int(x) for x in v.split(".")))
-    version = _next_free_version(session, top)
+    version = _next_free_version(session, champion.version)
     raw["model"]["version"] = version
     raw["model"]["description"] = (f"Uitdager uit voorstel {proposal_id}: gewichten van "
                                    f"{', '.join(sorted(payload))} aangepast; verder gelijk aan {champion.version}.")

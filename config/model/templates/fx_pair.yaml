@@ -51,5 +51,6 @@ gates:
     kind: pillar_agreement
     min_pillars: 2
     set_grade: C
+    mode: exact                  # chapter 6: "geen voordeel" means C, also for a pair that would score lower
     label_nl: geen voordeel
     reason_nl: Minder dan twee pijlers wijzen dezelfde kant op.

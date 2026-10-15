@@ -65,10 +65,25 @@ def performance(request: Request) -> dict:
 def proposals(request: Request) -> list[dict]:
     with request.app.state.jobs.sf() as session:
         rows = session.execute(text(
-            """SELECT id, kind, status, created_at, decided_at, applied_version, run_id, summary_nl, payload, evidence,
-                      source, refusal
-               FROM model_proposal ORDER BY (status = 'open') DESC, id DESC LIMIT 30""")).mappings().all()
+            """SELECT p.id, p.kind, p.status, p.created_at, p.decided_at, p.applied_version, p.run_id, p.summary_nl,
+                      p.payload, p.evidence, p.source, p.refusal, mv.version AS model_version,
+                      p.model_version_id = :active AS current
+               FROM model_proposal p LEFT JOIN model_version mv ON mv.id = p.model_version_id
+               ORDER BY (p.status = 'open') DESC, p.id DESC LIMIT 30"""),
+            {"active": request.app.state.jobs.model_version_id}).mappings().all()
     return [dict(r) for r in rows]
+
+
+def _check_current(request: Request, proposal_id: int) -> None:
+    """A proposal measured on another model version than the active one cannot be approved: its numbers (letter
+    bounds, weights) belong to that model. The next backtest of the active model makes a fresh proposal."""
+    with request.app.state.jobs.sf() as session:
+        row = session.execute(text(
+            "SELECT p.model_version_id, mv.version FROM model_proposal p "
+            "LEFT JOIN model_version mv ON mv.id = p.model_version_id WHERE p.id = :i"), {"i": proposal_id}).first()
+    if row is not None and row.model_version_id != request.app.state.jobs.model_version_id:
+        raise HTTPException(409, f"Voorstel {proposal_id} is berekend op modelversie {row.version}, niet op de "
+                                 f"actieve versie. Wacht op het voorstel van de terugtest van het actieve model.")
 
 
 def _decide(request: Request, proposal_id: int, approve: bool) -> dict:
@@ -83,6 +98,7 @@ def _decide(request: Request, proposal_id: int, approve: bool) -> dict:
 
 @router.post("/proposals/{proposal_id}/approve")
 def approve(proposal_id: int, request: Request) -> dict:
+    _check_current(request, proposal_id)
     with request.app.state.jobs.sf() as session:
         kind = session.execute(text("SELECT kind FROM model_proposal WHERE id = :i"), {"i": proposal_id}).scalar()
     if kind == "weights":

@@ -1,8 +1,8 @@
 # Graadmeter - global model settings.
 # Every change anywhere under config/model/ requires a new `version`
 # and a refreshed entry in versions.lock.yaml (see README, "Modelversie").
-version: "0.5.0"
-description: Startgewichten uit de bouwprompt (hoofdstuk 5 en 6), nog niet geijkt; grading-engine en cryptotoewijzing; aandelen.
+version: "0.6.0"
+description: Na de controle - winsorizen zonder dubbeltelling, FX "geen voordeel" is precies C, CET1-drempel in ratio, indices in euro, 10-maandsgemiddelde over afgesloten maanden, Timing voor obligatie-ETF's.
 
 default_horizon_months: [6, 12]
 
@@ -18,6 +18,7 @@ plus_minus: thirds
 
 scoring:
   winsorize: [0.05, 0.95]        # clip outliers at the 5th and 95th percentile before ranking
+  winsor_excludes_self: true     # bounds from the peer group only, so the asset itself is not counted twice
   valuation_mix:                 # applied to pillars marked `valuation: true`
     peer: 0.80
     own_history: 0.20

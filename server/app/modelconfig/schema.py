@@ -95,6 +95,9 @@ class PillarAgreementGate(GateBase):
     min_pillars: int = Field(ge=1)
     set_grade: Grade
     label_nl: str
+    # "at_most": only pulls better letters down to set_grade (model 0.5.0 and earlier). "exact": the letter
+    # becomes set_grade, also from below, as chapter 6 asks for currency pairs ("C met het label geen voordeel").
+    mode: Literal["at_most", "exact"] = "at_most"
 
 
 Gate = Annotated[
@@ -219,6 +222,9 @@ class Template(Strict):
 
 class ScoringSettings(Strict):
     winsorize: tuple[float, float]
+    # True from model 0.6.0: the clipping bounds come from the comparison group alone. Before, the asset's own
+    # value was added once more (it is already in the group), which shifted the bounds slightly.
+    winsor_excludes_self: bool = False
     valuation_mix: dict[Literal["peer", "own_history"], float]
 
     @field_validator("valuation_mix")

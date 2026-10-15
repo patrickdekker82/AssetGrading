@@ -83,7 +83,8 @@ Alles wat het model bepaalt staat in versiebeheerde YAML-bestanden, niet in code
 
 Elke wijziging aan `config/model/` levert een nieuwe modelversie op. Na een wijziging:
 
-1. Verhoog `version` in `config/model/model.yaml` (bijvoorbeeld `0.1.0` → `0.1.1`).
+1. Verhoog het middelste getal van `version` in `config/model/model.yaml` (bijvoorbeeld `0.6.0` → `0.7.0`).
+   Het laatste getal is voor uitdagers uit de leerlus (`0.6.1`, `0.6.2`, ...).
 2. Leg de versie vast: `docker compose run --rm -v ./config:/config server python -m app.cli lock-model`
    (of lokaal in `server/`: `python -m app.cli lock-model`).
 
@@ -156,7 +157,7 @@ volledig. Met een sleutel schrijft een goedkoop model (`claude-haiku-5-5`, in te
 `config/ai.yaml`) 's nachts via de batch-API een toelichting per asset. Elk getal en elke grade in die
 tekst wordt gecontroleerd tegen de berekende cijfers; bij een afwijking volgt één nieuwe poging, daarna
 blijft de sjabloontekst staan. Een toelichting wordt alleen opnieuw geschreven als de grade verandert of
-een pijler meer dan 5 punten verschuift. Het maandbudget (standaard 5 dollar) is een harde stop; het
+een pijler meer dan 5 punten verschuift. Het maandbudget (standaard 5 euro, omgerekend tegen de ECB-koers) is een harde stop; het
 verbruik staat onder Instellingen.
 
 - **Eén toelichting nu schrijven:** `docker compose exec server python -m app.cli explain bitcoin`.
@@ -207,8 +208,8 @@ het nieuwe grote missers. Daar komen alleen **voorstellen** uit:
 - Elk gewichtsvoorstel gaat door een vaste controle van de vangrails (5–40% per pijler, 0,5–1,5 keer het
   startgewicht, hoogstens 3 procentpunt per kwartaal, minimaal 120 maanden terugtest, 30 assets per maand en
   12 maanden live). Een voorstel dat een vangrail schendt wordt geweigerd en kan niet worden goedgekeurd.
-- **Goedkeuren** start een uitdager: een nieuwe modelversie die elke nacht in de schaduw meedraait en nooit
-  wordt getoond. De wekelijkse taak "Terugtest van uitdagers" maakt de terugtest die de toetsen nodig hebben.
+- **Goedkeuren** start een uitdager: een nieuwe modelversie (het laatste versiegetal omhoog, bijvoorbeeld 0.6.1)
+  die elke nacht in de schaduw meedraait en nooit wordt getoond. De wekelijkse taak "Terugtest van uitdagers" maakt de terugtest die de toetsen nodig hebben.
 - **Promoveren** kan pas na minstens 6 maanden schaduw en als alle toetsen slagen (t-waarde 3, verbetering
   t 2, Deflated Sharpe boven 0,95, PBO onder 0,2, volgorde, wisselingen, daling, live niet slechter),
   hoogstens één keer per 6 maanden. Dan wordt de uitdager meteen actief, zonder herstart.

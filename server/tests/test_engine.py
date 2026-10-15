@@ -1,5 +1,7 @@
 """Grading engine: letters, percentiles, pillars, coverage, gates, hysteresis, bandwidth (chapter 5)."""
 
+import copy
+
 import pytest
 
 from app.grading.engine import GradeInput, MetricInput, grade, peg_factor_score
@@ -311,3 +313,46 @@ def test_peg_deviation_scoring_in_basis_points():
     assert peg_factor_score("peg_deviation", 0.0, t) == 100
     assert peg_factor_score("peg_deviation", 0.005, t) == pytest.approx(50)
     assert peg_factor_score("peg_deviation", 0.02, t) == 0
+
+
+# --- model 0.6.0 ---------------------------------------------------------------------------------
+
+def test_winsorizing_without_the_asset_itself_keeps_bounds_from_the_group():
+    group = list(range(1, 21))
+    # The extreme value does not move the bounds: it is clipped to the group's 95th percentile and ties there.
+    top = percentile_of(1_000_000, group, higher_is_better=True, winsor=(0.05, 0.95), winsor_excludes_self=True)
+    near = percentile_of(19.05, group, higher_is_better=True, winsor=(0.05, 0.95), winsor_excludes_self=True)
+    assert top == near
+    # Without winsorizing the result is the same as before for values inside the bounds.
+    assert percentile_of(10, group, higher_is_better=True, winsor=(0.05, 0.95), winsor_excludes_self=True) == \
+        percentile_of(10, group, higher_is_better=True)
+    assert CONFIG.settings.scoring.winsor_excludes_self
+
+
+def _no_edge_input(pct_first: float) -> GradeInput:
+    inp = full_input("fx_pair", 50)
+    for m in CONFIG.templates["fx_pair"].pillars[0].metrics:
+        if CONFIG.metrics[m.id].scoring == "direct":
+            inp.metrics[m.id].value = pct_first
+        else:
+            inp.metrics[m.id].peer_pct = pct_first
+    return inp
+
+
+def test_fx_no_edge_is_exactly_c_also_for_a_weak_pair():
+    gate = next(g for g in CONFIG.templates["fx_pair"].gates if isinstance(g, PillarAgreementGate))
+    assert gate.mode == "exact"
+    res = grade(_no_edge_input(5), CONFIG)
+    assert next(g for g in res.gates if g.id == gate.id).status == "hit"
+    assert res.letter == "C" and "geen voordeel" in res.labels
+    # The older behaviour (0.5.0 and before): the gate only pulls a better grade down.
+    old = copy.deepcopy(CONFIG)
+    t = old.templates["fx_pair"]
+    old.templates["fx_pair"] = t.model_copy(update={"gates": [
+        g.model_copy(update={"mode": "at_most"}) if g.id == gate.id else g for g in t.gates]})
+    assert GRADES.index(grade(_no_edge_input(5), old).letter) > GRADES.index("C")
+
+
+def test_cet1_gate_uses_the_ratio_unit():
+    gate = next(g for g in CONFIG.templates["stock_financial"].gates if g.id == "cet1_thin_buffer")
+    assert CONFIG.metrics["cet1_buffer"].unit == "ratio" and gate.value == 0.01

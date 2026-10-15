@@ -56,23 +56,25 @@ def grades(request: Request, tab: str = "crypto") -> dict:
             return {"tab": tab, "as_of": None, "rows": [], "model_version": config.version}
         rows = session.execute(text(
             """
-            WITH membership AS (
+            WITH membership AS MATERIALIZED (
                 SELECT DISTINCT ON (asset_id, universe) asset_id, universe, rank, included, exclusion,
                        market_cap_eur
                 FROM universe_membership
                 WHERE universe = ANY(:u) AND as_of <= :d + :lag ORDER BY asset_id, universe, as_of DESC
-            ), list AS (
+            ), list AS MATERIALIZED (
                 SELECT asset_id, min(rank) FILTER (WHERE universe <> 'stocks_aex') AS rank,
                        bool_or(included) AS included, min(exclusion) AS exclusion,
                        max(market_cap_eur) AS market_cap_eur,
                        array_agg(universe ORDER BY universe) FILTER (WHERE included) AS lists
                 FROM membership GROUP BY asset_id
-            ), month_ago AS (
+            ), month_ago AS MATERIALIZED (
                 SELECT DISTINCT ON (asset_id) asset_id, letter FROM grade_snapshot
                 WHERE model_version_id = :v AND as_of <= :d - 30 ORDER BY asset_id, as_of DESC
-            ), spark AS (
-                SELECT asset_id, array_agg(round(close_eur::numeric, 10)::float8 ORDER BY ts) AS closes
-                FROM price_daily_eur WHERE ts > :d - 90 AND ts <= :d GROUP BY asset_id
+            ), spark AS MATERIALIZED (
+                -- Materialized: inlined, the planner re-evaluated this per row (10 s for the stock tab).
+                SELECT p.asset_id, array_agg(round(p.close_eur::numeric, 10)::float8 ORDER BY p.ts) AS closes
+                FROM price_daily_eur p JOIN asset pa ON pa.id = p.asset_id
+                WHERE p.ts > :d - 90 AND p.ts <= :d AND pa.asset_class = ANY(:c) GROUP BY p.asset_id
             )
             SELECT g.as_of, a.slug, a.asset_class, a.sector, a.country, a.name, a.symbol, a.categories, g.template_id,
                    g.status,
@@ -123,7 +125,8 @@ def grades(request: Request, tab: str = "crypto") -> dict:
     for r in out:
         if r["asset_class"] == "etc" and r["commodity"] and r["status"] != "no_grade":
             if r["commodity"] not in best or (r["score"] or 0) > (best[r["commodity"]]["score"] or 0):
-                best[r["commodity"]] = {"id": r["id"], "name": r["name"], "letter": r["letter"], "score": r["score"]}
+                best[r["commodity"]] = {"id": r["id"], "name": r["name"], "letter": r["letter"], "score": r["score"],
+                                        "coverage": r["coverage"]}
     for r in out:
         if r["asset_class"] == "commodity":
             r["best_product"] = best.get(r["id"])

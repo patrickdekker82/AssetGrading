@@ -88,7 +88,11 @@ def run_checks(session: Session, settings: EvaluationSettings, challenger_id: in
                              f">= {cfg['min_t_improvement']}"))
 
         # Deflated Sharpe and PBO over every model configuration ever backtested (the recorded trials).
-        trials = session.execute(text("SELECT count(*) FROM model_version")).scalar()
+        # Every configuration ever computed counts as a trial: stored model versions plus every weight set that
+        # was proposed (also the refused ones and the language model's), since each was looked at.
+        trials = session.execute(text(
+            "SELECT (SELECT count(*) FROM model_version) + (SELECT count(*) FROM model_proposal "
+            "WHERE kind = 'weights')")).scalar()
         series = {}
         for vid, run in session.execute(text(
                 "SELECT model_version_id, max(id) FROM backtest_run WHERE status = 'ok' GROUP BY model_version_id")):

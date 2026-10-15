@@ -201,6 +201,35 @@ INDEX_INDICATORS = [
 
 INDEX_DEFAULT_ON = {"sma200", "sma10m"}
 
+# Bond ETFs (technical.yaml chart_sets.bonds): the price of a bond fund moves against its yield, plus the
+# yield curve as context. The MOVE index has no free source and is left out.
+BOND_INDICATORS = [
+    # Context only: the bond template has no trend pillar; these feed Timing, not the score.
+    IndicatorDef("sma200", "Gemiddelde 200 dagen", "price", "context", "#e91e63"),
+    IndicatorDef("sma10m", "Gemiddelde 10 maanden", "price", "context", "#7b1fa2"),
+    IndicatorDef("drawdown", "Daling vanaf de top (%)", "drawdown", "context", "#c62828"),
+    IndicatorDef("curve_us_2_10", "Rentecurve VS 10 jaar min 2 jaar (pp)", "curve", "context", "#1565c0"),
+    IndicatorDef("curve_us_3m_10", "Rentecurve VS 10 jaar min 3 maanden (pp)", "curve", "context", "#00897b"),
+    IndicatorDef("curve_ea_2_10", "Rentecurve eurozone AAA 10 jaar min 2 jaar (pp)", "curve", "context", "#ef6c00"),
+]
+BOND_DEFAULT_ON = {"sma200", "curve_us_2_10", "curve_ea_2_10"}
+
+
+def bond_indicators(ohlc: pd.DataFrame, curves: dict[str, pd.Series]) -> dict[str, pd.Series]:
+    close = ohlc["close"].astype(float)
+    c = close.to_numpy(dtype=np.float64)
+    months = sample(close, "1M")
+    out: dict[str, pd.Series] = {
+        "sma200": _clean(talib.SMA(c, 200), close.index),
+        "sma10m": months.rolling(10).mean().reindex(close.index).ffill(),
+        "drawdown": (close / close.cummax() - 1) * 100,
+    }
+    for key, series in curves.items():
+        if series is not None and not series.empty:
+            out[key] = series.loc[series.index >= close.index[0]]
+    cleaned = {k: v.dropna() for k, v in out.items()}
+    return {k: v for k, v in cleaned.items() if not v.empty}
+
 
 def index_indicators(ohlc: pd.DataFrame, benchmark: pd.Series | None, vix: pd.Series | None,
                      vix3m: pd.Series | None, breadth: pd.Series | None) -> dict[str, pd.Series]:
@@ -242,11 +271,20 @@ COMMODITY_INDICATORS = [
 ]
 COMMODITY_DEFAULT_ON = {"sma50", "sma200"}
 
+# ECB reference rates are one fixing a day: ADX, ATR and Ichimoku are computed on those closes (the high and
+# low of a day are not published), which the labels say.
 FX_INDICATORS = [
     IndicatorDef("ema50", "EMA 50 dagen", "price", "score", "#2962ff"),
     IndicatorDef("ema200", "EMA 200 dagen", "price", "score", "#e91e63"),
     IndicatorDef("mom3m", "Momentum 3 maanden (%)", "mom", "score", "#00897b"),
     IndicatorDef("mom12m", "Momentum 12 maanden (%)", "mom", "score", "#5d4037"),
+    IndicatorDef("rate_diff", "Renteverschil 3 maanden (procentpunt)", "rate", "score", "#00695c"),
+    IndicatorDef("ichimoku_tenkan", "Ichimoku 9 (slotkoersen)", "price", "context", "#26a69a"),
+    IndicatorDef("ichimoku_kijun", "Ichimoku 26 (slotkoersen)", "price", "context", "#ef5350"),
+    IndicatorDef("ichimoku_span_a", "Ichimoku wolk A", "price", "context", "#a5d6a7"),
+    IndicatorDef("ichimoku_span_b", "Ichimoku wolk B (52)", "price", "context", "#ef9a9a"),
+    IndicatorDef("adx14", "ADX 14 (slotkoersen)", "adx", "context", "#6a1b9a"),
+    IndicatorDef("atr14_pct", "ATR 14 in % (slotkoersen)", "atr", "context", "#455a64"),
     IndicatorDef("cftc_index", "CFTC-index 3 jaar (0-100)", "cftc", "context", "#1565c0"),
 ]
 FX_DEFAULT_ON = {"ema50", "ema200"}
@@ -307,13 +345,29 @@ def commodity_indicators(ohlc: pd.DataFrame, cftc: pd.Series | None) -> dict[str
     return {k: v for k, v in cleaned.items() if not v.empty}
 
 
-def fx_indicators(ohlc: pd.DataFrame, cftc: pd.Series | None) -> dict[str, pd.Series]:
+def ichimoku(close: pd.Series) -> dict[str, pd.Series]:
+    """Ichimoku 9-26-52 on closes; the cloud is drawn 26 days ahead, as usual (shifted on the trading days)."""
+    def mid(n: int) -> pd.Series:
+        return (close.rolling(n).max() + close.rolling(n).min()) / 2
+
+    tenkan, kijun = mid(9), mid(26)
+    return {"ichimoku_tenkan": tenkan, "ichimoku_kijun": kijun,
+            "ichimoku_span_a": ((tenkan + kijun) / 2).shift(26), "ichimoku_span_b": mid(52).shift(26)}
+
+
+def fx_indicators(ohlc: pd.DataFrame, cftc: pd.Series | None,
+                  rate_diff: pd.Series | None = None) -> dict[str, pd.Series]:
     close = ohlc["close"].astype(float)
     c = close.to_numpy(dtype=np.float64)
     out: dict[str, pd.Series] = {
         "ema50": _clean(talib.EMA(c, 50), close.index), "ema200": _clean(talib.EMA(c, 200), close.index),
         "mom3m": (close / close.shift(63) - 1) * 100, "mom12m": (close / close.shift(255) - 1) * 100,
+        "adx14": _clean(talib.ADX(c, c, c, 14), close.index),
+        "atr14_pct": _clean(talib.ATR(c, c, c, 14), close.index) / close * 100,
+        **ichimoku(close),
     }
+    if rate_diff is not None and not rate_diff.empty:
+        out["rate_diff"] = rate_diff.reindex(close.index.union(rate_diff.index)).ffill().reindex(close.index)
     idx = _cftc_index(cftc, close.index[0])
     if idx is not None:
         out["cftc_index"] = idx

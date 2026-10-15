@@ -29,7 +29,13 @@ def coverage_for(session: Session, template_id: str, champion_id: int,
     bt = bt[bt["template_id"] == template_id] if not bt.empty else bt
     live = measurement_frame(session, "live", None, champion_id, horizon)
     live = live[live["template_id"] == template_id] if not live.empty else live
-    for f in (bt, live):
+    if not bt.empty and not live.empty:
+        # The backtest runs up to today: a month-end that also has live grades counts once, with the live ones.
+        live_months_set = set(live.dropna(subset=["excess"])["as_of"])
+        bt_for_ic = bt[~bt["as_of"].isin(live_months_set)]
+    else:
+        bt_for_ic = bt
+    for f in (bt_for_ic, live):
         if not f.empty:
             frames.append(f)
     bt_months = int(bt["as_of"].nunique()) if not bt.empty else 0

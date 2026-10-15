@@ -113,6 +113,9 @@ def load_inputs(session: Session, cfg: RegimeSettings,
     return world, hy, vix
 
 
+REGIME_START = date(2010, 1, 1)    # the first day of the stored regime history
+
+
 def update_regime(sf: sessionmaker[Session], config: ModelConfig, model_version_id: int, until: date,
                   start: date, report: Report) -> None:
     """Store the regime for every day from the first missing day up to `until` (idempotent)."""

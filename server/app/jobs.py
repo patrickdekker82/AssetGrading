@@ -17,7 +17,7 @@ from app.commodities_config import CommoditiesConfig
 from app.grading.commodities import grade_commodities
 from app.grading.crypto import grade_crypto
 from app.grading.markets import grade_markets
-from app.grading.regime import update_regime
+from app.grading.regime import REGIME_START, update_regime
 from app.grading.stocks import grade_stocks
 from app.ingest.commodities import run_commodities
 from app.ingest.crypto import run_crypto
@@ -125,7 +125,6 @@ def run_stocks_and_grade(c: JobContext) -> Report:
     return report
 
 
-REGIME_START = date(2010, 1, 1)
 
 
 def run_markets_and_grade(c: JobContext) -> Report:

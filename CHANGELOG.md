@@ -1,5 +1,55 @@
 # Changelog
 
+## Na de bouw – controle en verbeteringen, model 0.6.0 (2026-10-15)
+
+Een controle van alle hoofdstukken van de bouwprompt tegen de code en een doorloop van elke pagina
+(12 pagina's, 21 assets, geen fouten). Wat is gerepareerd of toegevoegd:
+
+### Model 0.6.0 (nieuwe versie; 0.5.0 blijft exact herberekenbaar)
+
+- **Winsorizen zonder dubbeltelling**: de grenzen (5e en 95e percentiel) komen alleen uit de vergelijkingsgroep;
+  de asset zelf telde eerst twee keer mee.
+- **Valuta "geen voordeel" is precies C** (hoofdstuk 6), ook voor een paar dat lager zou scoren; eerst trok de
+  gate alleen een betere grade omlaag. In de app staat nu "grade wordt C" in plaats van "hoogstens C".
+- **CET1-drempel in de juiste eenheid**: 0,01 (1 procentpunt als ratio) in plaats van 1,0.
+- **Indices: relatieve sterkte in euro** tegenover MSCI World (eerst in verschillende valuta's door elkaar).
+- **10-maandsgemiddelde over afgesloten maanden**; de lopende maand telde mee.
+- **Obligatie-ETF's krijgen Timing** (technische score van de fondskoers); de score verandert niet, want het
+  sjabloon heeft geen trendpijler.
+- Op 2026-10-14 opnieuw gegradeerd: 310 grades, verschillen vooral bij indices (gemiddeld 3,9 punten).
+  `cli verify`: 1.391 van 1.391 grades exact gelijk, over alle versies.
+
+### Overig
+
+- **Snelheid**: de tab Aandelen laadde in 10 s, nu 0,2 s; de dekking op Instellingen van 9 s naar enkele
+  seconden en daarna 10 minuten uit het geheugen.
+- **Grafieken**: valuta met ADX, ATR, Ichimoku en het renteverschil; obligaties met eigen set (gemiddelden,
+  daling vanaf de top, rentecurves VS en eurozone); VIX ook bij indices en ETF's; de gekozen indicatoren
+  worden per soort grafiek onthouden in plaats van één gedeelde lijst.
+- **Grades altijd met context**: dekking, peildatum en modelversie ook in zoeken, vergelijkbare ETF's, producten
+  en het beste product in de ranglijst.
+- **Tab Model**: de rangcorrelatie (IC) per maand als staafgrafiek per sjabloon; een voorstel dat op een andere
+  modelversie is berekend kan niet meer worden goedgekeurd (alleen afgewezen).
+- **Leerlus**: een maand met live grades telt in het kwartaaloverzicht niet nog eens mee uit de terugtest; het
+  aantal geprobeerde varianten voor de Deflated Sharpe telt nu exact; uitdagers krijgen een patchnummer
+  (0.6.1, 0.6.2, ...) zodat ze nooit botsen met een nieuwe modelversie uit de bestanden.
+- **Marktregime**: op de eerste dag van een nieuwe modelversie wordt het regime eerst berekend, zodat ook de
+  crypto- en aandelenrun (die vóór de marktenrun draaien) de regimescore hebben.
+- **Taalmodel**: het budget staat in euro (5 euro, omgerekend tegen de ECB-koers); de verboden woorden komen
+  uit de modelconfiguratie (`forbidden_words_nl`) in plaats van alleen een vaste lijst.
+- Het Top-N-keuzemenu staat alleen nog op tabs waar de lijst echt in grootte kan wisselen.
+
+### Bekend, nog niet opgelost
+
+- **Ontbrekende gratis bronnen**: US Treasury, Marketaux (nieuws) en Wereldbank Pink Sheet zijn niet aangesloten.
+  Daardoor blijven maatstaven leeg: REIT (geen grade), CET1 en NPL bij banken, waardering van indices,
+  insidertransacties, ETF-spread en -instroom, ETF-instroom bij bitcoin en vraag naar edelmetaal.
+- **Terugtest met de huidige lijsten** (overlevingsbias): historische samenstellingen zijn niet gratis.
+- **Acceptatie op de NAS en met echte sleutels** (taalmodel) is nog niet op de Synology zelf gedaan:
+  draai daar `scripts/nas-check.sh`.
+- **Yahoo Finance**: de voorwaarden staan geautomatiseerd ophalen niet expliciet toe; jouw beslissing.
+- Het open ijkvoorstel van terugtest 3 hoort bij model 0.5.0; terugtest 4 van model 0.6.0 maakt een nieuw voorstel.
+
 ## Fase 10 – Afronding (2026-10-15)
 
 ### Gebouwd

@@ -60,7 +60,7 @@ def test_without_api_key_the_template_text_is_shown(client):
     d = client.get("/api/assets/bitcoin").json()
     assert d["explanation_source"] == "sjabloon" and d["explanation_meta"]["rejected"] is False
     usage = client.get("/api/ai/usage").json()
-    assert usage["key_configured"] is False and usage["spent_usd"] == 0 and usage["budget_usd"] > 0
+    assert usage["key_configured"] is False and usage["spent_eur"] == 0 and usage["budget_eur"] > 0
     assert usage["components"][0]["model"] == "claude-haiku-5-5"
     r = client.post("/api/jobs/explanations/run")
     assert r.status_code in (202, 503)      # the scheduler is off in tests
@@ -184,3 +184,19 @@ def test_model_page_keeps_live_and_backtest_apart(client):
     assert client.post(f"/api/model/proposals/{pid}/reject").json()["status"] == "rejected"
     assert client.post(f"/api/model/proposals/{pid}/approve").status_code == 409     # decided is decided
     assert client.post("/api/model/proposals/999999/approve").status_code == 404
+
+
+def test_a_proposal_from_another_model_version_cannot_be_approved(client):
+    from app.db import get_engine
+
+    with get_engine().begin() as conn:
+        old = conn.execute(text("INSERT INTO model_version (version, config_hash, description, config) "
+                                "VALUES ('0.0.1', 'old', 'oud', '{}') RETURNING id")).scalar()
+        pid = conn.execute(text(
+            "INSERT INTO model_proposal (kind, model_version_id, summary_nl, payload, evidence) "
+            "VALUES ('letter_scale', :v, 'oud', '{}', '{}') RETURNING id"), {"v": old}).scalar()
+    shown = next(p for p in client.get("/api/model/proposals").json() if p["id"] == pid)
+    assert shown["current"] is False and shown["model_version"] == "0.0.1"
+    r = client.post(f"/api/model/proposals/{pid}/approve")
+    assert r.status_code == 409 and "0.0.1" in r.json()["detail"]
+    assert client.post(f"/api/model/proposals/{pid}/reject").json()["status"] == "rejected"

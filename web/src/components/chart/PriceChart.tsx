@@ -41,7 +41,11 @@ export type ChartData = {
 
 const INTERVALS = [{ id: "1d", label: "Dag" }, { id: "1w", label: "Week" }, { id: "1M", label: "Maand" }];
 const MAX_PANES = 2;
-const STORE_KEY = "graadmeter.chart.crypto.indicators";
+// The saved selection is kept per indicator set (one per asset class), so a choice made on a crypto chart
+// never hides the defaults of a stock or currency chart.
+function storeKey(catalog: IndicatorDef[]): string {
+  return `graadmeter.chart.indicators.${catalog.map((c) => c.id).sort().join(",")}`;
+}
 const euro = new Intl.NumberFormat("nl-NL", { maximumSignificantDigits: 6 });
 
 function readStore<T>(key: string, fallback: T): T {
@@ -96,7 +100,7 @@ export function PriceChart({ assetId }: { assetId: string }) {
       .then((d: ChartData) => {
         if (cancelled) return;
         setData(d);
-        setEnabled((current) => current ?? readStore<string[]>(STORE_KEY,
+        setEnabled((current) => current ?? readStore<string[]>(storeKey(d.catalog),
           d.catalog.filter((c) => c.default_on).map((c) => c.id)));
       })
       .catch(() => !cancelled && setError("De grafiekdata kon niet worden geladen."));
@@ -114,7 +118,7 @@ export function PriceChart({ assetId }: { assetId: string }) {
       const list = current ?? [];
       if (list.includes(def.id)) {
         const next = list.filter((x) => x !== def.id);
-        writeStore(STORE_KEY, next);
+        if (data) writeStore(storeKey(data.catalog), next);
         return next;
       }
       if (def.pane !== "price" && data) {
@@ -126,7 +130,7 @@ export function PriceChart({ assetId }: { assetId: string }) {
         }
       }
       const next = [...list, def.id];
-      writeStore(STORE_KEY, next);
+      if (data) writeStore(storeKey(data.catalog), next);
       return next;
     });
   }, [data]);

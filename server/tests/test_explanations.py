@@ -304,7 +304,7 @@ def test_monthly_budget_is_a_hard_stop(hundred, model, ai, labels, db):  # noqa:
         from app.ai.explanation import estimate_usd
 
         cost = estimate_usd(ai, request_params(ai, one.payload(one.candidates(session)[0])), batch=True)
-    tight = dataclasses.replace(ai, monthly_budget_usd=cost * 10.5)
+    tight = dataclasses.replace(ai, monthly_budget_eur=cost * 10.5)   # no ECB rate in the test database: 1:1
     report = Explainer(sf, tight, model, version_id, labels, fake).run()
     assert report.counts["explanations_submitted"] == 10
     assert any("Maandbudget" in n for n in report.notes)

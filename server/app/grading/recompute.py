@@ -55,7 +55,8 @@ def recompute(snapshot: GradeSnapshot, config: ModelConfig) -> Check:
         expected = None
         if len(values) >= min_peers(config, inp.template_id):
             higher = config.metrics[metric_id].direction == "higher"
-            expected = percentile_of(mi.value, values, higher_is_better=higher, winsor=winsor)
+            expected = percentile_of(mi.value, values, higher_is_better=higher, winsor=winsor,
+                                              winsor_excludes_self=config.settings.scoring.winsor_excludes_self)
         if expected != mi.peer_pct:
             diffs.append(f"percentile {metric_id}: stored {mi.peer_pct}, recomputed {expected}")
     result = grade(inp, config).to_dict()

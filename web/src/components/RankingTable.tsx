@@ -161,7 +161,7 @@ export function RankingTable({ tab, views }: { tab: string; views: View[] }) {
                       </span>
                       {r.asset_class === "commodity" && (
                         <span className="muted small">
-                          Product: {r.best_product ? `${r.best_product.name} (${r.best_product.letter ?? "–"})` : "geen gevolgd"}
+                          Product: {r.best_product ? `${r.best_product.name} (${r.best_product.letter ?? "–"}, dekking ${Math.round((r.best_product.coverage ?? 0) * 100)}%)` : "geen gevolgd"}
                         </span>
                       )}
                     </Link>

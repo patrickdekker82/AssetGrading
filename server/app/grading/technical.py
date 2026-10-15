@@ -76,7 +76,9 @@ def tech_raw(closes: pd.Series, benchmark: pd.Series | None, p: TechnicalParams,
         sma_long = talib.SMA(values, timeperiod=p.sma_long)
         sma_short = talib.SMA(values, timeperiod=p.sma_short)
         months = pd.Series([d.year * 100 + d.month for d in closes.index], index=closes.index)
-        monthly = closes.groupby(months).last()  # month-end closes (the current month: latest close)
+        monthly = closes.groupby(months).last()
+        # Completed months only (chapter 7: never a running period); the current price is compared with them.
+        monthly = monthly[monthly.index < as_of.year * 100 + as_of.month]
         tests = {
             "price_above_sma200": last > sma_long[-1],
             "sma50_above_sma200": sma_short[-1] > sma_long[-1],

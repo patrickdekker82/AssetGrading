@@ -350,3 +350,21 @@ def test_qualitative_assessment_is_logged_and_kept(db, ai):  # noqa: F811
 
 
 from tests.test_stocks import stock_world  # noqa: E402,F401
+
+
+def test_a_month_with_live_grades_is_not_counted_twice(monkeypatch):
+    import pandas as pd
+
+    from app.learning import quarterly
+
+    def frame(months):
+        return pd.DataFrame([{"template_id": "t", "as_of": m, "asset_id": a, "excess": 0.01 * a}
+                             for m in months for a in range(6)])
+
+    bt, live = frame(["2026-07-31", "2026-08-31", "2026-09-30"]), frame(["2026-09-30"])
+    monkeypatch.setattr(quarterly, "latest_run", lambda s, v: 1)
+    monkeypatch.setattr(quarterly, "measurement_frame",
+                        lambda s, kind, run, v, h: bt if kind == "backtest" else live)
+    cov, df = quarterly.coverage_for(None, "t", 1, 6)
+    assert (cov.backtest_months, cov.live_months) == (3, 1)
+    assert len(df) == 18 and df.groupby("as_of").size().max() == 6

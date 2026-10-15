@@ -37,7 +37,8 @@ type CalibrationEntry = { name_nl?: string; months: number; observations: number
   distribution_current?: Record<string, number>; distribution_proposed?: Record<string, number> };
 type Proposal = { id: number; kind: string; status: string; created_at: string; decided_at: string | null;
   applied_version: string | null; run_id: number | null; summary_nl: string; source: string;
-  refusal: string[] | null; payload: Record<string, unknown>; evidence: Record<string, unknown> };
+  refusal: string[] | null; payload: Record<string, unknown>; evidence: Record<string, unknown>;
+  model_version: string | null; current: boolean };
 type GateTest = { observations: number; misses: number;
   best: { percentile: number; threshold: number; misses_caught: number; false_alarms: number } | null };
 
@@ -86,6 +87,7 @@ export async function ModelPerformance({ horizon }: { horizon: number }) {
           </p>
         )}
         <TemplateTable report={perf.live.report} horizon={h} empty="Nog geen live uitkomsten." />
+        <IcPerMonth report={perf.live.report} horizon={h} />
         <LetterDetails report={perf.live.report} horizon={h} />
       </section>
 
@@ -115,6 +117,7 @@ export async function ModelPerformance({ horizon }: { horizon: number }) {
           </p>
         )}
         <TemplateTable report={perf.backtest.report} horizon={h} empty="Nog geen terugtest gedraaid." />
+        <IcPerMonth report={perf.backtest.report} horizon={h} />
         <LetterDetails report={perf.backtest.report} horizon={h} />
       </section>
     </div>
@@ -164,6 +167,52 @@ function TemplateTable({ report, horizon, empty }: { report: Report | null; hori
         </tbody>
       </table>
     </div>
+  );
+}
+
+// Rank correlation per month (chapter 8): one bar per month-end, above the line when good scores were
+// followed by better returns, below when the order was reversed.
+function IcPerMonth({ report, horizon }: { report: Report | null; horizon: string }) {
+  const rows = Object.entries(report?.templates ?? {})
+    .map(([id, t]) => [id, t.name_nl, Object.entries(t.horizons[horizon]?.ic.by_month ?? {})] as const)
+    .filter(([, , months]) => months.length > 0);
+  if (rows.length === 0) return null;
+  return (
+    <details className="details">
+      <summary><Term id="rangcorrelatie">Rangcorrelatie</Term> per maand</summary>
+      <div className="ic-grid">
+        {rows.map(([id, name, months]) => <IcBars key={id} name={name} months={months as [string, number][]} />)}
+      </div>
+      <p className="muted small">
+        Elke staaf is één maandeinde: boven de lijn kregen hoge scores daarna een beter rendement, eronder
+        het omgekeerde. Overlappende horizons maken buurmaanden van elkaar afhankelijk.
+      </p>
+    </details>
+  );
+}
+
+function IcBars({ name, months }: { name: string; months: [string, number][] }) {
+  const w = 320, h = 70, mid = h / 2;
+  const step = w / Math.max(months.length, 1);
+  const positive = months.filter(([, v]) => v > 0).length;
+  return (
+    <figure className="ic-figure">
+      <figcaption>{name} <span className="muted small">· {positive} van {months.length} maanden boven nul</span></figcaption>
+      <svg viewBox={`0 0 ${w} ${h}`} width="100%" height={h} role="img"
+        aria-label={`Rangcorrelatie per maand voor ${name}`}>
+        <line x1="0" x2={w} y1={mid} y2={mid} className="ic-axis" />
+        {months.map(([month, v], i) => {
+          const len = Math.min(Math.abs(v), 1) * (mid - 2);
+          return (
+            <rect key={month} x={i * step} width={Math.max(step - 0.5, 0.5)} y={v >= 0 ? mid - len : mid}
+              height={Math.max(len, 0.5)} className={v >= 0 ? "ic-pos" : "ic-neg"}>
+              <title>{`${month.slice(0, 7)}: ${numFmt.format(v)}`}</title>
+            </rect>
+          );
+        })}
+      </svg>
+      <div className="ic-range muted small"><span>{months[0][0].slice(0, 7)}</span><span>{months[months.length - 1][0].slice(0, 7)}</span></div>
+    </figure>
   );
 }
 
@@ -239,7 +288,14 @@ function ProposalCard({ p }: { p: Proposal }) {
       {p.kind === "letter_scale" && <CalibrationTable evidence={p.evidence as Record<string, CalibrationEntry>} />}
       {p.kind === "weights" && <WeightsTable p={p} />}
       {p.kind === "gate_candidate" && <GateEvidence evidence={p.evidence} />}
-      {p.status === "open" && (
+      {p.status === "open" && !p.current && (
+        <p className="warn-text small">
+          Berekend op modelversie {p.model_version}, niet op het actieve model. Goedkeuren kan niet; de volgende
+          terugtest van het actieve model maakt een nieuw voorstel. Afwijzen ruimt dit voorstel op.
+        </p>
+      )}
+      {p.status === "open" && !p.current && <ProposalButtons id={p.id} rejectOnly />}
+      {p.status === "open" && p.current && (
         <ProposalButtons id={p.id} approveLabel={p.kind === "weights" ? "Goedkeuren en in de schaduw starten" : "Goedkeuren"} />
       )}
       {p.kind === "letter_scale" && p.status === "approved" && !p.applied_version && (

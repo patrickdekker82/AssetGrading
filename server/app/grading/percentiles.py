@@ -22,13 +22,17 @@ def _quantile(ordered: Sequence[float], q: float) -> float:
 
 
 def percentile_of(value: float, group: Sequence[float], *, higher_is_better: bool,
-                  winsor: tuple[float, float] | None = None) -> float:
+                  winsor: tuple[float, float] | None = None, winsor_excludes_self: bool = False) -> float:
     """Mid-rank percentile (0-100) of `value` within `group` (which should include `value`).
 
     Ties share the average rank. With one member the result is 50. Lower-is-better metrics are flipped.
     """
     members = list(group)
-    if winsor and len(members) >= 3:
+    if winsor and len(members) >= 3 and winsor_excludes_self:
+        ordered = sorted(members)
+        lo, hi = _quantile(ordered, winsor[0]), _quantile(ordered, winsor[1])
+        members, value = [min(max(v, lo), hi) for v in members], min(max(value, lo), hi)
+    elif winsor and len(members) >= 3:
         clipped = winsorize(members + [value], *winsor)
         members, value = clipped[:-1], clipped[-1]
     n = len(members)

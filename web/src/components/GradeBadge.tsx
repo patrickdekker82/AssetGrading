@@ -34,7 +34,7 @@ export type GradeRow = {
   lists?: string[];
   direction?: string | null;
   product?: boolean;
-  best_product?: { id: string; name: string; letter: string | null; score: number | null } | null;
+  best_product?: { id: string; name: string; letter: string | null; score: number | null; coverage?: number | null } | null;
 };
 
 function tone(letter: string): string {

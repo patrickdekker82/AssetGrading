@@ -172,7 +172,8 @@ def build_inputs(prepared: list[Prepared], config: ModelConfig, as_of: date) -> 
                     continue
                 values = [q.metrics.values[metric_id] for q in members if q.metrics.values.get(metric_id) is not None]
                 if len(values) >= min_peers(config, p.template_id):
-                    mi.peer_pct = percentile_of(mi.value, values, higher_is_better=higher, winsor=winsor)
+                    mi.peer_pct = percentile_of(mi.value, values, higher_is_better=higher, winsor=winsor,
+                                              winsor_excludes_self=config.settings.scoring.winsor_excludes_self)
                 peers_used[metric_id] = {"group": group_name, "values": values}
                 hist = p.metrics.history.get(metric_id)
                 if metric_id in valuation and hist is not None:
@@ -250,6 +251,13 @@ def write_snapshots(sf: sessionmaker[Session], prepared: list[Prepared], config:
     """Grade every prepared asset and store the snapshots (an existing snapshot for the day is kept)."""
     with sf() as session:
         regime = sink.regime_on(session, as_of, model_version_id)
+    if regime is None and sink.live and sink.regime_version_id is None:
+        # First day of a new model version: its regime history may not exist yet (the markets run stores it).
+        from app.grading.regime import REGIME_START, update_regime
+
+        update_regime(sf, config, model_version_id, as_of, REGIME_START, Report())
+        with sf() as session:
+            regime = sink.regime_on(session, as_of, model_version_id)
     apply_regime_metric(prepared, config, regime)
     inputs = build_inputs(prepared, config, as_of)
     days = config.settings.stability.hysteresis_days

@@ -51,9 +51,9 @@ type Ops = {
 type AiUsage = {
   month: string;
   key_configured: boolean;
-  budget_usd: number;
-  spent_usd: number;
-  reserved_usd: number;
+  budget_eur: number;
+  spent_eur: number;
+  reserved_eur: number;
   pending_batches: number;
   components: { component: string; label_nl: string; model: string; prompt_version: string; batch: boolean;
     regenerate_shift_points: number }[];
@@ -293,19 +293,20 @@ function OpsCard({ ops }: { ops: Ops }) {
   );
 }
 
-const usd = new Intl.NumberFormat("nl-NL", { style: "currency", currency: "USD", maximumFractionDigits: 4 });
+// The API bills in dollars; costs are converted at the latest ECB rate and shown in euro.
+const eur = new Intl.NumberFormat("nl-NL", { style: "currency", currency: "EUR", maximumFractionDigits: 4 });
 
 function AiCard({ ai }: { ai: AiUsage }) {
-  const used = ai.spent_usd + ai.reserved_usd;
-  const pct = Math.min(100, Math.round((used / ai.budget_usd) * 100));
+  const used = ai.spent_eur + ai.reserved_eur;
+  const pct = Math.min(100, Math.round((used / ai.budget_eur) * 100));
   return (
     <div className="card">
       <h2 className="card-title">Taalmodel</h2>
       <div className="stats">
         <Stat label="API-sleutel" value={ai.key_configured ? "ingesteld" : "niet ingesteld"}
           hint={ai.key_configured ? "toelichtingen 's nachts via de batch-API" : "de app toont de sjabloontekst"} />
-        <Stat label={`Verbruik ${ai.month}`} value={`${usd.format(ai.spent_usd)} van ${usd.format(ai.budget_usd)}`}
-          hint={ai.pending_batches ? `plus ${usd.format(ai.reserved_usd)} gereserveerd voor ${ai.pending_batches} lopende batch(es)` : "harde stop bij het maandbudget"} />
+        <Stat label={`Verbruik ${ai.month}`} value={`${eur.format(ai.spent_eur)} van ${eur.format(ai.budget_eur)}`}
+          hint={ai.pending_batches ? `plus ${eur.format(ai.reserved_eur)} gereserveerd voor ${ai.pending_batches} lopende batch(es)` : "harde stop bij het maandbudget"} />
         <Stat label="Toelichtingen" value={`${formatNumber(ai.explanations.model)} door taalmodel`}
           hint={`${formatNumber(ai.explanations.template_after_check)} sjabloontekst na afgekeurde getalcontrole`} />
       </div>
@@ -341,7 +342,7 @@ function AiCard({ ai }: { ai: AiUsage }) {
                   <td className="num">{formatNumber(sum("calls"))}</td>
                   <td className="num">{formatNumber(sum("passed"))}</td>
                   <td className="num">{formatNumber(sum("input_tokens"))} / {formatNumber(sum("output_tokens"))}</td>
-                  <td className="num">{usd.format(sum("cost"))}</td>
+                  <td className="num">{eur.format(sum("cost"))}</td>
                 </tr>
               );
             })}

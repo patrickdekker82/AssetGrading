@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.ai.client import LlmResult
 from app.ai.config import AiConfig
-from app.ai.explanation import spent_usd
+from app.ai.explanation import budget_usd, spent_usd
 
 
 @dataclass
@@ -41,7 +41,7 @@ def call(session: Session, ai: AiConfig, client, component: str, system: str, pa
     params = params_for(ai, component, system, payload, schema)
     chars = len(system) + len(params["messages"][0]["content"])
     estimate = ai.cost_usd(c.model, {"input_tokens": chars // 3 + 50, "output_tokens": c.max_tokens}, batch=False)
-    if spent_usd(session, now) + estimate > ai.monthly_budget_usd:
+    if spent_usd(session, now) + estimate > budget_usd(session, ai):
         return CallResult(None, ["maandbudget taalmodel bereikt"])
     res: LlmResult = client.create(params)
     problems, data = [], None

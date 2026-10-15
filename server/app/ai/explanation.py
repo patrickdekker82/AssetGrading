@@ -177,7 +177,7 @@ class Checked:
     problems: list[str]
 
 
-def check_result(res: LlmResult, payload: dict, ai: AiConfig) -> Checked:
+def check_result(res: LlmResult, payload: dict, ai: AiConfig, forbidden: list[str] | None = None) -> Checked:
     """Stop reason, JSON schema, numbers, grades, length and forbidden words."""
     if res.error:
         return Checked(False, None, [], [f"fout: {res.error}"])
@@ -192,7 +192,7 @@ def check_result(res: LlmResult, payload: dict, ai: AiConfig) -> Checked:
     except (ValueError, KeyError, TypeError):
         return Checked(False, None, [], ["antwoord volgt het schema niet"])
     body = " ".join(body.split())
-    problems = check_text(body, payload, ai.explanation.min_words, ai.explanation.max_words)
+    problems = check_text(body, payload, ai.explanation.min_words, ai.explanation.max_words, forbidden)
     known = {m["id"] for m in payload["maatstaven"]}
     unknown = sorted(str(u) for u in used if u not in known)
     if unknown:
@@ -321,6 +321,18 @@ def month_start(now: datetime) -> datetime:
     return datetime(now.year, now.month, 1, tzinfo=UTC)
 
 
+def usd_per_eur(session: Session) -> float:
+    """Latest ECB rate; 1.0 when none is stored (a lower dollar budget, so on the safe side)."""
+    rate = session.execute(text(
+        "SELECT rate FROM fx_rate WHERE base = 'EUR' AND quote = 'USD' ORDER BY date DESC LIMIT 1")).scalar()
+    return float(rate) if rate else 1.0
+
+
+def budget_usd(session: Session, ai: AiConfig) -> float:
+    """The monthly budget (set in euro) in the dollars the API bills in."""
+    return ai.monthly_budget_eur * usd_per_eur(session)
+
+
 def spent_usd(session: Session, now: datetime) -> float:
     """Cost logged this month plus the reservation of batches still running."""
     used = session.execute(text("SELECT COALESCE(SUM(cost_usd), 0) FROM llm_call WHERE created_at >= :s"),
@@ -354,19 +366,20 @@ class Explainer:
         return build_input(snap.name, snap.as_of, snap.result, self.model, self.labels)
 
     def _budget_left(self, session: Session) -> float:
-        return self.ai.monthly_budget_usd - spent_usd(session, self.now())
+        return budget_usd(session, self.ai) - spent_usd(session, self.now())
 
     def _finish(self, session: Session, snap: Snapshot, payload: dict, res: LlmResult, mode: str,
                 batch_id: str | None, report: Report) -> None:
         """Check an answer; one direct retry on failure, then the template text."""
-        checked = check_result(res, payload, self.ai)
+        forbidden = self.model.settings.forbidden_words_nl
+        checked = check_result(res, payload, self.ai, forbidden)
         call_id = log_call(session, self.ai, snap, payload, res, checked, mode, 1, batch_id)
         if not checked.passed:
             report.add("explanations_rejected", 1)
             params = request_params(self.ai, payload, checked.problems)
             if self._budget_left(session) >= estimate_usd(self.ai, params, batch=False):
                 retry = self.client.create(params)
-                checked = check_result(retry, payload, self.ai)
+                checked = check_result(retry, payload, self.ai, forbidden)
                 call_id = log_call(session, self.ai, snap, payload, retry, checked, "direct", 2, None)
             else:
                 report.note_once("Maandbudget taalmodel bereikt; geen nieuwe poging.")

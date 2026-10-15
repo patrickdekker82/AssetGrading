@@ -3,7 +3,8 @@
 # Model names and prices checked against the Claude API documentation on 2026-10-14.
 
 api_key_env: ANTHROPIC_API_KEY       # without a key the app shows the fixed template text
-monthly_budget_usd: 5.00             # hard stop per calendar month (UTC), batches included
+monthly_budget_eur: 5.00             # hard stop per calendar month (UTC), batches included; converted at the
+                                     # latest ECB rate, since the API is billed in US dollars
 
 # US dollars per million tokens, standard (non-batch) price. Cache writes cost 1.25x and cache reads
 # 0.1x the input price; the batch API halves everything.

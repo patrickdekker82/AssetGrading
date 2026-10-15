@@ -16,7 +16,7 @@ type Metric = { id: string; value: number | null; score: number | null; weight: 
 type Pillar = { id: string; name_nl: string; weight: number; effective_weight: number; score: number | null;
   coverage: number; timing: boolean; contribution: number | null; metrics: Metric[];
   horizon_months?: number[] | null };
-type Gate = { id: string; status: string; cap: string | null; label_nl: string | null; reason_nl: string;
+type Gate = { id: string; status: string; cap: string | null; sets_grade?: boolean; label_nl: string | null; reason_nl: string;
   detail: string | null };
 type Detail = {
   asset: { id: string; name: string; ticker: string; asset_class: string; template?: string; template_name?: string;
@@ -190,7 +190,7 @@ export default async function AssetPage({ params }: Props) {
             {d.gates.map((g) => (
               <li key={g.id} className={`gate gate-${g.status}`}>
                 <span className="gate-status">{GATE_STATUS[g.status] ?? g.status}</span>
-                <span>{g.reason_nl}{g.cap && <> Begrenzing: hoogstens <strong>{g.cap}</strong>.</>}</span>
+                <span>{g.reason_nl}{g.cap && (g.sets_grade ? <> Gevolg: grade wordt <strong>{g.cap}</strong>.</> : <> Begrenzing: hoogstens <strong>{g.cap}</strong>.</>)}</span>
                 {g.detail && <span className="muted small"> ({g.detail})</span>}
               </li>
             ))}
@@ -269,7 +269,13 @@ function Characteristics({ categories }: { categories: string[] }) {
   );
 }
 
+// Chapter 11: a grade is never shown without its coverage, model version and as-of date.
+function gradeContext(r: { coverage: number | null; as_of: string | null }, model?: string): string {
+  return `dekking ${Math.round((r.coverage ?? 0) * 100)}%, peildatum ${r.as_of ?? "–"}${model ? `, model ${model}` : ""}`;
+}
+
 type PeerRow = { id: string; name: string; letter: string | null; status: string; score: number | null;
+  coverage: number | null; as_of: string | null;
   tracking_difference: number | null; ongoing_charges: number | null; rest_after_costs: number | null;
   fund_size: number | null; domicile: string | null; replication: string | null; distribution: string | null;
   securities_lending: string | null; td_source: string | null };
@@ -277,7 +283,8 @@ const pct = new Intl.NumberFormat("nl-NL", { style: "percent", minimumFractionDi
 const mln = new Intl.NumberFormat("nl-NL", { maximumFractionDigits: 0 });
 
 async function EtfPeers({ id }: { id: string }) {
-  const p = await fetchServer<{ group: string | null; rows: PeerRow[] }>(`/api/assets/${encodeURIComponent(id)}/peers`);
+  const p = await fetchServer<{ group: string | null; rows: PeerRow[]; model_version?: string }>(
+    `/api/assets/${encodeURIComponent(id)}/peers`);
   if (!p?.group || p.rows.length < 2) return null;
   const source = p.rows.find((r) => r.td_source)?.td_source;
   return (
@@ -287,7 +294,7 @@ async function EtfPeers({ id }: { id: string }) {
         <table className="ranking">
           <thead>
             <tr>
-              <th>Fonds</th><th>Grade</th>
+              <th>Fonds</th><th>Grade</th><th className="num"><Term id="datadekking">Dekking</Term></th>
               <th className="num"><Term id="tracking_difference">Tracking difference</Term></th>
               <th className="num"><Term id="ongoing_charges">Kosten</Term></th>
               <th className="num"><Term id="rest_na_kosten">Rest na kosten</Term></th>
@@ -298,7 +305,8 @@ async function EtfPeers({ id }: { id: string }) {
             {p.rows.map((r) => (
               <tr key={r.id} className={r.id === id ? "row-current" : undefined}>
                 <td><Link href={`/etfs/${r.id}`}>{r.name}</Link></td>
-                <td>{r.status === "no_grade" ? "–" : r.letter}</td>
+                <td title={gradeContext(r, p.model_version)}>{r.status === "no_grade" ? "–" : r.letter}</td>
+                <td className="num">{Math.round((r.coverage ?? 0) * 100)}%</td>
                 <td className="num">{r.tracking_difference === null ? "–" : pct.format(r.tracking_difference)}</td>
                 <td className="num">{r.ongoing_charges === null ? "–" : pct.format(r.ongoing_charges)}</td>
                 <td className="num">{r.rest_after_costs === null ? "–" : pct.format(r.rest_after_costs)}</td>
@@ -314,18 +322,20 @@ async function EtfPeers({ id }: { id: string }) {
       <p className="muted small">
         Tracking difference per jaar = kosten + rest. De kosten verklaren het grootste deel; de rest komt van
         belasting op dividend (domicilie, of synthetisch zonder Amerikaanse bronbelasting), opbrengst uit het
-        uitlenen van effecten en de manier van repliceren.{source ? ` Gemeten: ${source}.` : ""}
+        uitlenen van effecten en de manier van repliceren.{source ? ` Gemeten: ${source}.` : ""} Grades:
+        modelversie {p.model_version ?? "–"}, peildatum {p.rows[0]?.as_of ?? "–"}.
       </p>
     </section>
   );
 }
 
 type RelatedRow = { id: string; name: string; asset_class: string; letter: string | null; status: string;
-  score: number | null; structure: string | null; collateralized: string | null; ongoing_charges: number | null;
+  score: number | null; coverage: number | null; as_of: string | null; structure: string | null; collateralized: string | null; ongoing_charges: number | null;
   roll_yield_12m: number | null; tracking_difference: number | null };
 
 async function Related({ id, kind, score }: { id: string; kind: string; score: number | null }) {
-  const r = await fetchServer<{ rows: RelatedRow[] }>(`/api/assets/${encodeURIComponent(id)}/products`);
+  const r = await fetchServer<{ rows: RelatedRow[]; model_version?: string }>(
+    `/api/assets/${encodeURIComponent(id)}/products`);
   if (!r) return null;
   if (kind === "fx") {
     const m = r.rows[0];
@@ -333,7 +343,7 @@ async function Related({ id, kind, score }: { id: string; kind: string; score: n
     return (
       <section className="card">
         <h2 className="card-title">Spiegelpaar</h2>
-        <p><Link href={`/fx/${m.id}`}>{m.name}</Link>: {m.status === "no_grade" ? "geen grade" : `${m.letter}, score ${n(m.score)}`}.
+        <p><Link href={`/fx/${m.id}`}>{m.name}</Link>: {m.status === "no_grade" ? "geen grade" : `${m.letter}, score ${n(m.score)} (${gradeContext(m, r.model_version)})`}.
           {score !== null && m.score !== null && <> Samen {n(score + m.score)}: een richtingsscore voor de ene kant is het
             spiegelbeeld van de andere.</>}</p>
       </section>
@@ -345,7 +355,7 @@ async function Related({ id, kind, score }: { id: string; kind: string; score: n
     return (
       <section className="card">
         <h2 className="card-title">Oordeel over de grondstof zelf</h2>
-        <p><Link href={`/commodities/${c.id}`}>{c.name}</Link>: {c.status === "no_grade" ? "geen grade" : c.letter}.
+        <p><Link href={`/commodities/${c.id}`}>{c.name}</Link>: {c.status === "no_grade" ? "geen grade" : `${c.letter} (${gradeContext(c, r.model_version)})`}.
           De grade hierboven is het productoordeel: hoe goed dit product de grondstof volgt en wat het kost.</p>
       </section>
     );
@@ -356,14 +366,16 @@ async function Related({ id, kind, score }: { id: string; kind: string; score: n
       {r.rows.length === 0 ? <p className="muted">Geen product (ETC) gevolgd voor deze grondstof.</p> : (
         <div className="table-wrap">
           <table className="ranking">
-            <thead><tr><th>Product</th><th>Productoordeel</th><th>Structuur</th><th>Onderpand</th>
+            <thead><tr><th>Product</th><th>Productoordeel</th><th className="num"><Term id="datadekking">Dekking</Term></th>
+              <th>Structuur</th><th>Onderpand</th>
               <th className="num"><Term id="ongoing_charges">Kosten</Term></th>
               <th className="num"><Term id="roll_yield_12m">Rolopbrengst 12 mnd</Term></th></tr></thead>
             <tbody>
               {r.rows.map((p) => (
                 <tr key={p.id}>
                   <td><Link href={`/commodities/${p.id}`}>{p.name}</Link></td>
-                  <td>{p.status === "no_grade" ? "–" : p.letter}</td>
+                  <td title={gradeContext(p, r.model_version)}>{p.status === "no_grade" ? "–" : p.letter}</td>
+                  <td className="num">{Math.round((p.coverage ?? 0) * 100)}%</td>
                   <td>{p.structure ? VALUE_LABELS[p.structure] ?? p.structure : "–"}</td>
                   <td>{p.collateralized ? VALUE_LABELS[p.collateralized] : "–"}</td>
                   <td className="num">{p.ongoing_charges === null ? "–" : pct.format(p.ongoing_charges)}</td>
@@ -376,7 +388,7 @@ async function Related({ id, kind, score }: { id: string; kind: string; score: n
       )}
       <p className="muted small">Een particulier kan de grondstof zelf niet aanhouden; daarom twee oordelen: de grondstof
         (hierboven) en het product. Rolopbrengst: rendement van het product min de koersverandering van het
-        eerstvolgende termijncontract.</p>
+        eerstvolgende termijncontract. Grades: modelversie {r.model_version ?? "–"}, peildatum {r.rows[0]?.as_of ?? "–"}.</p>
     </section>
   );
 }

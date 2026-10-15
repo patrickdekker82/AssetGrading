@@ -191,7 +191,9 @@ def prepare_indices(data: MarketData, config: ModelConfig) -> list[Prepared]:
         m.notes.append("geen gratis bron voor winst of CAPE van indices: de pijler Waardering blijft leeg")
         p = Prepared(a.id, a.slug, "index", [], m, price_eur=_last_eur(data, a.id))
         out.append(p)
-    _technical(out, data, config, benchmark_slug=config.technical.params["indices"].benchmark)
+    # In euro: an index in yen or pounds is compared with MSCI World (in dollars) only after conversion
+    # (chapter 7: never compare series in different currencies). From model 0.6.0.
+    _technical(out, data, config, benchmark_slug=config.technical.params["indices"].benchmark, eur=True)
     return out
 
 
@@ -401,6 +403,9 @@ def prepare_bonds(data: MarketData, config: ModelConfig) -> list[Prepared]:
         _fact_metric(m, f, "ongoing_charges", "ongoing_charges", "lopende kosten (bestand)")
         p = Prepared(a.id, a.slug, "bond", tags, m, price_eur=_last_eur(data, a.id), peer_key=c.get("category"))
         out.append(p)
+    # Timing for bond funds (chapter 7): the trend of the fund price, which moves against its yield. Shown as
+    # Timing only; the bond template has no trend pillar, so it does not enter the score.
+    _technical(out, data, config, benchmark_slug="", eur=True)
     return out
 
 

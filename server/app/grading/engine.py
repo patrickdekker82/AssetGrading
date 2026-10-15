@@ -236,15 +236,15 @@ def _evaluate_gates(template: Template, inp: GradeInput, pillars: list[PillarRes
 
 
 def _apply_gates(letter: str, gates: list[GateResult], template: Template) -> tuple[str, list[str]]:
-    labels = []
-    for g in gates:
-        if g.status != "hit":
-            continue
-        if g.label_nl:
-            labels.append(g.label_nl)
-        gate_def = next(x for x in template.gates if x.id == g.id)
+    hit = [(g, next(x for x in template.gates if x.id == g.id)) for g in gates if g.status == "hit"]
+    labels = [g.label_nl for g, _ in hit if g.label_nl]
+    # Setting a grade comes first, so a cap from another gate always wins (a gate never lifts past a cap).
+    # For "at_most" the order does not matter: both only lower the letter.
+    hit.sort(key=lambda pair: not isinstance(pair[1], PillarAgreementGate))
+    for g, gate_def in hit:
         if isinstance(gate_def, PillarAgreementGate):
-            letter = gate_def.set_grade if RANK[letter] < RANK[gate_def.set_grade] else letter
+            if gate_def.mode == "exact" or RANK[letter] < RANK[gate_def.set_grade]:
+                letter = gate_def.set_grade
         elif g.cap:
             letter = cap(letter, g.cap)
     if template.max_grade:
