@@ -65,8 +65,9 @@ def performance(request: Request) -> dict:
 def proposals(request: Request) -> list[dict]:
     with request.app.state.jobs.sf() as session:
         rows = session.execute(text(
-            """SELECT id, kind, status, created_at, decided_at, applied_version, run_id, summary_nl, payload, evidence
-               FROM model_proposal ORDER BY (status = 'open') DESC, id DESC LIMIT 20""")).mappings().all()
+            """SELECT id, kind, status, created_at, decided_at, applied_version, run_id, summary_nl, payload, evidence,
+                      source, refusal
+               FROM model_proposal ORDER BY (status = 'open') DESC, id DESC LIMIT 30""")).mappings().all()
     return [dict(r) for r in rows]
 
 
@@ -82,6 +83,13 @@ def _decide(request: Request, proposal_id: int, approve: bool) -> dict:
 
 @router.post("/proposals/{proposal_id}/approve")
 def approve(proposal_id: int, request: Request) -> dict:
+    with request.app.state.jobs.sf() as session:
+        kind = session.execute(text("SELECT kind FROM model_proposal WHERE id = :i"), {"i": proposal_id}).scalar()
+    if kind == "weights":
+        # An approved weight proposal starts as a challenger in the shadow; it does not become active.
+        from app.api.learning import start_challenger
+
+        return start_challenger(proposal_id, request)
     return _decide(request, proposal_id, True)
 
 

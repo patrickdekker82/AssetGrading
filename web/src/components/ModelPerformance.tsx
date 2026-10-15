@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { LearningPanel } from "@/components/LearningPanel";
 import { ProposalButtons } from "@/components/ProposalButtons";
 import { Term } from "@/components/Term";
 import { formatDateTime, formatNumber } from "@/lib/format";
@@ -35,7 +36,10 @@ type CalibrationEntry = { name_nl?: string; months: number; observations: number
   proposed: Record<string, number> | null; reason_nl?: string;
   distribution_current?: Record<string, number>; distribution_proposed?: Record<string, number> };
 type Proposal = { id: number; kind: string; status: string; created_at: string; decided_at: string | null;
-  applied_version: string | null; run_id: number | null; summary_nl: string; evidence: Record<string, CalibrationEntry> };
+  applied_version: string | null; run_id: number | null; summary_nl: string; source: string;
+  refusal: string[] | null; payload: Record<string, unknown>; evidence: Record<string, unknown> };
+type GateTest = { observations: number; misses: number;
+  best: { percentile: number; threshold: number; misses_caught: number; false_alarms: number } | null };
 
 export const HORIZONS = [1, 3, 6, 12];
 const LETTERS = ["A+", "A", "A-", "B+", "B", "B-", "C+", "C", "C-", "D+", "D", "D-", "F"];
@@ -45,7 +49,9 @@ const share = (v: number | null | undefined) => (v === null || v === undefined ?
 const numFmt = new Intl.NumberFormat("nl-NL", { maximumFractionDigits: 2 });
 const pct = (v: number | null | undefined) => (v === null || v === undefined ? "–" : pctFmt.format(v));
 const num = (v: number | null | undefined) => (v === null || v === undefined ? "–" : numFmt.format(v));
-const STATUS_NL: Record<string, string> = { open: "open", approved: "goedgekeurd", rejected: "afgewezen" };
+const STATUS_NL: Record<string, string> = { open: "open", approved: "goedgekeurd", rejected: "afgewezen",
+  refused: "geweigerd door de vangrails" };
+const SOURCE_NL: Record<string, string> = { model: "berekend", taalmodel: "taalmodel", owner: "eigenaar" };
 
 export async function ModelPerformance({ horizon }: { horizon: number }) {
   const [perf, proposals] = await Promise.all([
@@ -83,10 +89,12 @@ export async function ModelPerformance({ horizon }: { horizon: number }) {
         <LetterDetails report={perf.live.report} horizon={h} />
       </section>
 
+      <LearningPanel />
+
       <section className="card">
-        <h2 className="card-title">Openstaande voorstellen</h2>
+        <h2 className="card-title">Voorstellen</h2>
         {(!proposals || proposals.length === 0) && (
-          <p className="card-foot muted">Geen voorstellen. Een voorstel ontstaat na een terugtest of, vanaf fase 9, elk kwartaal.</p>
+          <p className="card-foot muted">Geen voorstellen. Een voorstel ontstaat na een terugtest en in de kwartaalronde.</p>
         )}
         {proposals?.map((p) => <ProposalCard key={p.id} p={p} />)}
       </section>
@@ -216,51 +224,119 @@ function LetterDetails({ report, horizon }: { report: Report | null; horizon: st
 }
 
 function ProposalCard({ p }: { p: Proposal }) {
-  const entries = Object.entries(p.evidence ?? {});
   return (
     <div className="proposal">
       <p>
         <strong>Voorstel {p.id}</strong> · <span className={`status status-${p.status}`}>{STATUS_NL[p.status] ?? p.status}</span>
+        <span className="muted"> · {SOURCE_NL[p.source] ?? p.source}</span>
         {p.applied_version && <span className="muted"> · in modelversie {p.applied_version}</span>}
         <span className="muted"> · {formatDateTime(p.created_at)}</span>
       </p>
       <p>{p.summary_nl}</p>
-      {p.kind === "letter_scale" && entries.length > 0 && (
-        <div className="table-wrap">
-          <table className="ranking">
-            <thead>
-              <tr>
-                <th scope="col"><Term id="sjabloon">Sjabloon</Term></th>
-                <th scope="col" className="num">Maanden</th>
-                <th scope="col">Grenzen nu (A/B/C/D)</th>
-                <th scope="col">Voorstel</th>
-                <th scope="col">Verdeling A/B/C/D/F nu → voorstel</th>
-              </tr>
-            </thead>
-            <tbody>
-              {entries.map(([id, e]) => (
-                <tr key={id}>
-                  <td>{e.name_nl ?? id}</td>
-                  <td className="num">{formatNumber(e.months)}</td>
-                  <td className="muted">{bounds(e.current)}</td>
-                  <td>{e.proposed ? bounds(e.proposed) : <span className="muted" title={e.reason_nl}>blijft</span>}</td>
-                  <td className="muted">
-                    {e.distribution_current && e.distribution_proposed
-                      ? `${shares(e.distribution_current)} → ${shares(e.distribution_proposed)}` : e.reason_nl ?? "–"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+      {p.refusal && p.refusal.length > 0 && (
+        <ul className="refusal">{p.refusal.map((r) => <li key={r} className="warn-text small">{r}</li>)}</ul>
       )}
-      {p.status === "open" && <ProposalButtons id={p.id} />}
-      {p.status === "approved" && !p.applied_version && (
+      {p.kind === "letter_scale" && <CalibrationTable evidence={p.evidence as Record<string, CalibrationEntry>} />}
+      {p.kind === "weights" && <WeightsTable p={p} />}
+      {p.kind === "gate_candidate" && <GateEvidence evidence={p.evidence} />}
+      {p.status === "open" && (
+        <ProposalButtons id={p.id} approveLabel={p.kind === "weights" ? "Goedkeuren en in de schaduw starten" : "Goedkeuren"} />
+      )}
+      {p.kind === "letter_scale" && p.status === "approved" && !p.applied_version && (
         <p className="muted small">
           Goedgekeurd. De server past het model nooit zelf aan: leg de nieuwe modelversie vast met{" "}
           <code>python -m app.cli apply-proposal {p.id}</code> (zie README) en herstart de server.
         </p>
       )}
+      {p.kind === "gate_candidate" && p.status === "approved" && (
+        <p className="muted small">Gezien. Een nieuwe harde regel is een modelwijziging: een nieuwe modelversie in de configuratie.</p>
+      )}
+    </div>
+  );
+}
+
+function WeightsTable({ p }: { p: Proposal }) {
+  const [template, weights] = Object.entries(p.payload as Record<string, Record<string, number>>)[0] ?? [];
+  if (!weights) return null;
+  const ev = p.evidence as { current?: Record<string, number>; start?: Record<string, number>; bewijs?: string;
+    verwacht_effect?: string; risicos?: string; pillars?: Record<string, { ic: number; ic_shrunk: number }> };
+  return (
+    <div className="table-wrap">
+      <table className="ranking">
+        <thead>
+          <tr>
+            <th scope="col">Pijler ({template})</th>
+            <th scope="col" className="num">Start</th>
+            <th scope="col" className="num">Nu</th>
+            <th scope="col" className="num">Voorstel</th>
+            <th scope="col" className="num"><Term id="rangcorrelatie">Rangcorrelatie</Term></th>
+          </tr>
+        </thead>
+        <tbody>
+          {Object.keys(weights).map((k) => (
+            <tr key={k}>
+              <td>{k}</td>
+              <td className="num">{num(ev.start?.[k])}%</td>
+              <td className="num">{num(ev.current?.[k])}%</td>
+              <td className="num">{num(weights[k])}%</td>
+              <td className="num">{num(ev.pillars?.[k]?.ic)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {ev.bewijs && <p className="small"><strong>Bewijs:</strong> {ev.bewijs}</p>}
+      {ev.verwacht_effect && <p className="small"><strong>Verwacht effect:</strong> {ev.verwacht_effect}</p>}
+      {ev.risicos && <p className="small"><strong>Risico&apos;s:</strong> {ev.risicos}</p>}
+    </div>
+  );
+}
+
+function GateEvidence({ evidence }: { evidence: Record<string, unknown> }) {
+  const toets = evidence.toets as GateTest | null;
+  return (
+    <div className="small">
+      {typeof evidence.verklaring === "string" && <p>{evidence.verklaring}</p>}
+      {toets?.best ? (
+        <p className="muted">
+          Getoetst over de terugtest ({toets.observations} A- en B-grades, {toets.misses} missers): bij drempel{" "}
+          {num(toets.best.threshold)} ({toets.best.percentile}e percentiel) {toets.best.misses_caught} missers
+          gevangen en {toets.best.false_alarms} keer vals alarm.
+        </p>
+      ) : <p className="muted">Geen toetsbare kandidaat.</p>}
+    </div>
+  );
+}
+
+function CalibrationTable({ evidence }: { evidence: Record<string, CalibrationEntry> }) {
+  const entries = Object.entries(evidence ?? {});
+  if (entries.length === 0) return null;
+  return (
+    <div className="table-wrap">
+      <table className="ranking">
+        <thead>
+          <tr>
+            <th scope="col"><Term id="sjabloon">Sjabloon</Term></th>
+            <th scope="col" className="num">Maanden</th>
+            <th scope="col">Grenzen nu (A/B/C/D)</th>
+            <th scope="col">Voorstel</th>
+            <th scope="col">Verdeling A/B/C/D/F nu → voorstel</th>
+          </tr>
+        </thead>
+        <tbody>
+          {entries.map(([id, e]) => (
+            <tr key={id}>
+              <td>{e.name_nl ?? id}</td>
+              <td className="num">{formatNumber(e.months)}</td>
+              <td className="muted">{bounds(e.current)}</td>
+              <td>{e.proposed ? bounds(e.proposed) : <span className="muted" title={e.reason_nl}>blijft</span>}</td>
+              <td className="muted">
+                {e.distribution_current && e.distribution_proposed
+                  ? `${shares(e.distribution_current)} → ${shares(e.distribution_proposed)}` : e.reason_nl ?? "–"}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

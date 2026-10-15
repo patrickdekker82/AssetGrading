@@ -10,6 +10,7 @@ from app.ai import load_ai_config, make_client
 from app.api.assets import router as assets_router
 from app.api.data import router as data_router
 from app.api.grades import router as grades_router
+from app.api.learning import router as learning_router
 from app.api.model import router as model_router
 from app.api.routes import router
 from app.commodities_config import load_commodities_config
@@ -17,12 +18,12 @@ from app.db import get_engine
 from app.evaluation.outcomes import EvaluationSettings
 from app.glossary import load_glossary
 from app.jobs import JobContext, fail_orphaned_runs, schedule_jobs
+from app.learning.registry import load_active
 from app.markets_config import load_markets_config
 from app.modelconfig import load_model_config
 from app.providers.config import load_providers_config
 from app.providers.recorder import DbRecorder
 from app.providers.registry import Providers
-from app.registry import register_model_version
 from app.scheduler import create_scheduler
 from app.settings import get_settings
 from app.stocks_config import load_stocks_config
@@ -48,7 +49,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     engine = get_engine()
     sf = sessionmaker(bind=engine)
     with sf() as session:
-        model_version_id = register_model_version(session, config).id
+        # The files are the baseline; the owner may have promoted a challenger since (chapter 8).
+        config, model_version_id = load_active(session, config)
+    app.state.model_config = config
     fail_orphaned_runs(engine, sf)
     log.info("model version %s (%s) active", config.version, config.config_hash[:12])
 
@@ -83,3 +86,4 @@ app.include_router(data_router)
 app.include_router(assets_router)
 app.include_router(grades_router)
 app.include_router(model_router)
+app.include_router(learning_router)

@@ -41,3 +41,31 @@ calibration:
   min_months: 24                 # fewer backtest months for a template: keep the provisional bounds
   min_observations: 300          # graded asset-months
   round_to: 0.5
+
+# The learning loop (chapter 8, phase 9). Proposals only: nothing here changes a weight by itself.
+learning:
+  quarterly_horizon_months: 3      # pillar rank correlation over 3 months, quarter-ends only (no overlap)
+  shrink_months: 60                # IC_shrunk = IC x T / (T + 60)
+  max_lambda: 0.5                  # w_new = (1 - lambda) w0 + lambda w_target, lambda = min(0.5, T / (T + 60))
+  guardrails:
+    weight_min_pct: 5
+    weight_max_pct: 40
+    ratio_to_start: [0.5, 1.5]     # between 0.5 and 1.5 times the starting weight
+    max_change_pp: 3               # per quarter, per pillar, against the active weights
+    min_backtest_months: 120
+    min_assets_per_month: 30
+    min_live_months: 12
+  promotion:
+    horizon_months: 6
+    min_shadow_months: 6
+    min_t_own: 3.0
+    min_t_improvement: 2.0
+    min_deflated_sharpe: 0.95
+    max_pbo: 0.2
+    max_turnover_ratio: 1.2        # letter changes at most 20% more often than the champion
+    live_not_worse_t: -2.0         # live shadow: the IC difference may not be clearly negative
+    min_months_between_switches: 6
+  miss_analysis:
+    horizon_months: 6
+    excess_below: -0.30
+    max_per_quarter: 10

@@ -19,6 +19,15 @@ class ExplanationSettings:
 
 
 @dataclass(frozen=True)
+class ComponentSettings:
+    model: str
+    prompt_version: str
+    max_tokens: int
+    effort: str
+    extra: dict
+
+
+@dataclass(frozen=True)
 class AiConfig:
     api_key_env: str
     monthly_budget_usd: float
@@ -27,6 +36,7 @@ class AiConfig:
     cache_read_factor: float
     batch_discount: float
     explanation: ExplanationSettings
+    components: dict[str, ComponentSettings]
 
     def cost_usd(self, model: str, usage: dict, batch: bool) -> float:
         """Cost of one call from its token usage; unknown models are priced as the most expensive one."""
@@ -42,8 +52,13 @@ class AiConfig:
 def load_ai_config(path: Path) -> AiConfig:
     raw = yaml.safe_load(path.read_text(encoding="utf-8"))
     e = raw["components"]["explanation"]
-    if e["model"] not in raw["pricing"]:
-        raise ValueError(f"ai.yaml: geen prijs voor model {e['model']}")
+    for name, c in raw["components"].items():
+        if c["model"] not in raw["pricing"]:
+            raise ValueError(f"ai.yaml: geen prijs voor model {c['model']} ({name})")
+    base = {"model", "prompt_version", "max_tokens", "effort"}
+    components = {name: ComponentSettings(c["model"], c["prompt_version"], int(c["max_tokens"]), c["effort"],
+                                          {k: v for k, v in c.items() if k not in base})
+                  for name, c in raw["components"].items()}
     return AiConfig(
         api_key_env=raw["api_key_env"], monthly_budget_usd=float(raw["monthly_budget_usd"]),
         pricing={k: {"input": float(v["input"]), "output": float(v["output"])} for k, v in raw["pricing"].items()},
@@ -55,4 +70,5 @@ def load_ai_config(path: Path) -> AiConfig:
             min_words=int(e["words"]["min"]), max_words=int(e["words"]["max"]),
             batch_poll_hours=int(e["batch_poll_hours"]),
         ),
+        components=components,
     )

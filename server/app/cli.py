@@ -105,10 +105,10 @@ def _run_job(name: str) -> int:
     cfg = load_providers_config(settings.config_dir / "providers.yaml")
     universes = load_universes(settings.config_dir / "universes.yaml")
     model = load_model_config(settings.config_dir / "model")
-    from app.registry import register_model_version
+    from app.learning.registry import load_active
 
     with sf() as session:
-        version_id = register_model_version(session, model).id
+        model, version_id = load_active(session, model)
     from app.commodities_config import load_commodities_config
     from app.markets_config import load_markets_config
     from app.stocks_config import load_stocks_config
@@ -133,14 +133,14 @@ def _context():
     from sqlalchemy.orm import sessionmaker
 
     from app.db import get_engine
-    from app.registry import register_model_version
+    from app.learning.registry import load_active
 
     settings = get_settings()
     engine = get_engine()
     sf = sessionmaker(bind=engine)
     config = load_model_config(settings.config_dir / "model")
     with sf() as session:
-        version_id = register_model_version(session, config).id
+        config, version_id = load_active(session, config)
     return settings, sf, config, version_id
 
 
@@ -328,7 +328,9 @@ def _proposals() -> int:
 def _apply_proposal(proposal_id: int) -> int:
     from app.evaluation.proposals import apply_proposal
 
-    settings, sf, config, _ = _context()
+    settings, sf, _, _ = _context()
+    # The files are what changes, so the file version is the base (not a promoted challenger).
+    config = load_model_config(settings.config_dir / "model")
     try:
         version = apply_proposal(sf, settings.config_dir / "model", config, proposal_id)
     except ValueError as exc:

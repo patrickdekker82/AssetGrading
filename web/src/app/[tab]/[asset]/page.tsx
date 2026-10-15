@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { HistoryChart, type HistoryPoint } from "@/components/chart/HistoryChart";
 import { PriceChart } from "@/components/chart/PriceChart";
+import { Qualitative } from "@/components/Qualitative";
 import { Term } from "@/components/Term";
 import { WatchButton } from "@/components/WatchButton";
 import { directionText, formatMetric, groupName } from "@/lib/metrics";
@@ -205,6 +206,8 @@ export default async function AssetPage({ params }: Props) {
           <p className="muted small">{explanationNote(d)}</p>
         </section>
       )}
+
+      <Qualitative id={d.asset.id} />
 
       {/* 6. Grafiek */}
       <section className="card">

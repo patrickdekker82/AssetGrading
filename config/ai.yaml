@@ -24,3 +24,19 @@ components:
     regenerate_shift_points: 5       # rewrite only when the grade changes or a pillar moves more than this
     words: {min: 110, max: 220}      # chapter 2 asks for 120 to 200; a little slack before a retry
     batch_poll_hours: 24             # a batch older than this is given up and its reservation released
+  quarterly_review:
+    model: claude-opus-5-5           # stronger model for the quarterly review and the analysis of misses
+    prompt_version: quarterly-review-1
+    max_tokens: 16000
+    effort: high
+  miss_analysis:
+    model: claude-opus-5-5
+    prompt_version: miss-analysis-1
+    max_tokens: 8000
+    effort: high
+  qualitative:
+    model: claude-haiku-5-5          # cheap model for qualitative features
+    prompt_version: qualitative-1
+    max_tokens: 8000
+    effort: medium
+    max_source_chars: 400000         # longer documents are refused, not truncated silently

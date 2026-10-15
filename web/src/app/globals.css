@@ -355,3 +355,9 @@ h3 { font-size: 15px; margin: 0; }
 .status-open { color: var(--warn); }
 .status-approved { color: var(--good, #1a7f37); }
 .status-rejected { color: var(--muted); }
+.good-text { color: var(--good, #1a7f37); font-weight: 600; }
+.refusal { margin: 4px 0; padding-left: 18px; }
+.status-refused { color: var(--warn); }
+.status-shadow { color: var(--accent); }
+.qual-form { display: flex; flex-direction: column; gap: 8px; padding: 8px 16px; }
+.qual-form .input { font: inherit; font-size: 13px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); width: 100%; box-sizing: border-box; }

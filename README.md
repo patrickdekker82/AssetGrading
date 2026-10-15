@@ -194,6 +194,28 @@ assets hij dekt. Een terugtest is herberekend, geen behaald resultaat.
   `docker compose run --rm -v ./config:/config server python -m app.cli apply-proposal <nummer>`
   (de configuratie is in de containers alleen-lezen) en daarna `docker compose restart server`.
 
+### Leerlus: voorstellen, uitdagers en terugdraaien
+
+Elk kwartaal (de 3e van januari, april, juli en oktober) berekent de app per sjabloon een gewichtsvoorstel uit
+de gemeten rangcorrelaties, laat het taalmodel (als er een sleutel is) het rapport beoordelen en analyseert
+het nieuwe grote missers. Daar komen alleen **voorstellen** uit:
+
+- Elk gewichtsvoorstel gaat door een vaste controle van de vangrails (5–40% per pijler, 0,5–1,5 keer het
+  startgewicht, hoogstens 3 procentpunt per kwartaal, minimaal 120 maanden terugtest, 30 assets per maand en
+  12 maanden live). Een voorstel dat een vangrail schendt wordt geweigerd en kan niet worden goedgekeurd.
+- **Goedkeuren** start een uitdager: een nieuwe modelversie die elke nacht in de schaduw meedraait en nooit
+  wordt getoond. De wekelijkse taak "Terugtest van uitdagers" maakt de terugtest die de toetsen nodig hebben.
+- **Promoveren** kan pas na minstens 6 maanden schaduw en als alle toetsen slagen (t-waarde 3, verbetering
+  t 2, Deflated Sharpe boven 0,95, PBO onder 0,2, volgorde, wisselingen, daling, live niet slechter),
+  hoogstens één keer per 6 maanden. Dan wordt de uitdager meteen actief, zonder herstart.
+- **Terugdraaien** maakt de laatste promotie met één klik ongedaan.
+- **Kandidaat-gates** uit de analyse van missers zijn ter informatie: het taalmodel noemt alleen een
+  maatstaf en richting, de app toetst zelf elke drempel over de terugtest en telt vals alarm. Een nieuwe gate
+  is een modelwijziging in de configuratie.
+- **Kwalitatieve kenmerken**: plak op een assetpagina de tekst van een jaarverslag of whitepaper. Het
+  taalmodel geeft per onderdeel een oordeel met een letterlijk citaat; een citaat dat niet in de tekst staat
+  valt weg. Telt alleen als rode vlag, nooit in de score.
+
 ### ETF-kenmerken bijwerken
 
 Er is geen gratis bron met betrouwbare fondskenmerken. Werk daarom `config/etfs.csv` en
@@ -233,8 +255,8 @@ De app wordt in elf fases gebouwd (zie `CHANGELOG.md`). Na elke fase volgt een a
 | 5 | ETF's, obligaties, indices en marktregime | Klaar |
 | 6 | Grondstoffen en valuta | Klaar |
 | 7 | Toelichting, volglijst en bronnen | Klaar |
-| 8 | Uitkomsten, terugtest en pagina Model | Klaar, wacht op akkoord |
-| 9 | Leerlus | |
+| 8 | Uitkomsten, terugtest en pagina Model | Klaar |
+| 9 | Leerlus | Klaar, wacht op akkoord |
 | 10 | Afronding | |
 
 ## Wat deze app niet doet

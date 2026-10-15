@@ -23,7 +23,8 @@ TODAY = datetime.now(UTC).date()
 YESTERDAY = TODAY - timedelta(days=1)
 DATA_TABLES = ("price_bar", "fundamental_fact", "universe_membership", "asset_alias", "asset", "fx_rate",
                "macro_observation", "provider_response", "provider_call_log", "job_run", "grade_snapshot",
-               "market_regime", "llm_batch", "backtest_run", "model_proposal", "evaluation")
+               "market_regime", "llm_batch", "backtest_run", "model_proposal", "evaluation", "model_activation",
+               "challenger", "qualitative_assessment")
 
 
 def ms(d: date) -> int:

@@ -210,3 +210,5 @@ schedule:                            # UTC
   # Submit explanation batches after the evening runs and collect them (and crypto's) in the morning.
   explanations: "30 4,23 * * *"
   evaluation: "0 6 2 * *"           # monthly measurement, once the month's last prices are in
+  quarterly: "0 7 3 1,4,7,10 *"      # quarterly round: proposals only, nothing changes without the owner
+  challenger_backtests: "0 1 * * sun"  # weekly; does nothing when every model version has a backtest

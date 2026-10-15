@@ -190,6 +190,7 @@ class SnapshotSink:
 
     run_id: int | None = None
     regime: str | None = None
+    regime_version_id: int | None = None    # shadow grading: use the champion's stored regime
 
     @property
     def live(self) -> bool:
@@ -206,7 +207,9 @@ class SnapshotSink:
     def regime_on(self, session: Session, as_of: date, model_version_id: int) -> str | None:
         from app.grading.regime import regime_on
 
-        return regime_on(session, as_of, model_version_id) if self.live else self.regime
+        if not self.live:
+            return self.regime
+        return regime_on(session, as_of, self.regime_version_id or model_version_id)
 
     def previous_state(self, session: Session, asset_id: int, model_version_id: int, as_of: date,
                        days: int) -> tuple[str | None, list[str]]:

@@ -1,5 +1,54 @@
 # Changelog
 
+## Fase 9 – Leerlus (2026-10-15)
+
+### Gebouwd
+
+- **Kwartaalvoorstel voor gewichten** (stap 1 tot 6 van hoofdstuk 8): rangcorrelatie per pijler over 3
+  maanden op kwartaaleinden (geen overlap), terugtest en live samen, gekrompen met T / (T + 60), doelgewicht
+  evenredig aan gekrompen rangcorrelatie gedeeld door de spreiding, gemengd met de startgewichten
+  (λ = min(0,5; T / (T + 60))) en binnen de vangrails gebracht. T telt de maanden in onafhankelijke
+  kwartalen.
+- **Vangrails als vaste controle** voor elk voorstel, ook van het taalmodel: per pijler 5–40%, 0,5–1,5 keer
+  het startgewicht, hoogstens 3 procentpunt per kwartaal, minimale data (120 maanden terugtest, 30 assets per
+  maand, 12 maanden live). Een overtreding maakt het voorstel "geweigerd", met de redenen; zo'n voorstel kan
+  niet worden goedgekeurd, en ook bij het starten van een uitdager wordt opnieuw gecontroleerd.
+- **Kampioen en uitdager**: een goedgekeurd voorstel wordt een volledige modelversie in de database (de
+  configuratiebestanden blijven het anker met de startgewichten) en draait elke nacht in de schaduw mee met
+  hetzelfde marktregime als de kampioen. Nooit zichtbaar.
+- **Toetsen voor promotie**: 6 maanden schaduw, eigen t-waarde ≥ 3 en verbetering ≥ 2 in de terugtest
+  (Newey-West), Deflated Sharpe Ratio > 0,95 met het vastgelegde aantal pogingen (alle modelversies), PBO
+  < 0,2 (combinatorische kruisvalidatie over alle geteste versies), volgorde A–F niet slechter, wisselingen
+  hoogstens 20% hoger, daling van de A-groep niet groter, live schaduw niet duidelijk slechter, hoogstens één
+  wissel per 6 maanden. Gemeten op de sjablonen waarvan de gewichten veranderen.
+- **Promoveren en terugdraaien in de app**: append-only activatielog; promoveren alleen als alle toetsen slagen
+  en de eigenaar klikt, terugdraaien maakt de laatste promotie met één klik ongedaan. Het actieve model wisselt
+  zonder herstart; de server laadt bij het starten het actieve model uit dat log.
+- **Kwartaalbeoordeling door het taalmodel** (sterker model, `claude-opus-5-5`): het evaluatierapport in,
+  voorstellen met bewijs, verwacht effect en risico's uit, door dezelfde vangrailcontrole.
+- **Analyse van missers** (live A/B-grades die daarna meer dan 30% achterbleven): het taalmodel verklaart en
+  noemt hoogstens een maatstaf en richting; de code toetst elke deciel-drempel over de hele terugtest met
+  telling van gevangen missers en vals alarm.
+- **Kwalitatieve kenmerken** (goedkoop model): document in, per rubriek oordeel met letterlijk citaat; citaat
+  wordt in de bron gecontroleerd, onvoldoende bewijs is geldig, telt alleen als rode vlag op de assetpagina.
+- Nieuwe taken: kwartaalronde (3e van elk kwartaal) en wekelijks de terugtest van uitdagers. De maandmeting
+  meet ook de uitdagers en voert hun promotietoetsen uit.
+
+### Acceptatie
+
+- **Een voorstel dat een vangrail schendt wordt geweigerd**: getest met een stap van 6 procentpunt, met een
+  voorstel van het taalmodel (gelijke gewichten) en met een voorstel dat buiten de controle om op
+  "goedgekeurd" is gezet: geweigerd, niet goed te keuren, en geen uitdager.
+- **Een goedgekeurde wissel levert een nieuwe modelversie op en kan met één klik terug**: goedkeuren geeft
+  een nieuwe versie in de schaduw; promoveren maakt die actief; terugdraaien zet de vorige terug; een tweede
+  keer terugdraaien en een tweede wissel binnen 6 maanden worden geweigerd.
+- **Geen enkel pad wijzigt gewichten zonder akkoord**: nachtelijke schaduwgrading, maandmeting met
+  promotietoetsen en de kwartaalronde met taalmodel lopen allemaal; het actieve model blijft gelijk. Een test
+  controleert ook in de broncode dat alleen `promote`, `rollback` en de start met de configuratiebestanden in
+  het activatielog schrijven.
+- Op de huidige data stelt de kwartaalronde nog niets voor: elk sjabloon zit onder het minimum, vooral omdat
+  er nog geen 12 maanden live data zijn. Dat is de bedoeling van de vangrails.
+
 ## Fase 8 – Uitkomsten, terugtest en pagina Model (2026-10-15)
 
 ### Gebouwd

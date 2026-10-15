@@ -63,8 +63,9 @@ def run_crypto_and_grade(c: JobContext) -> Report:
         report.notes.append("Geen modelconfiguratie geladen; grading overgeslagen.")
         return report
     as_of = datetime.now(UTC).date() - timedelta(days=1)
+    start = date.fromisoformat(c.cfg.crypto.history_start)
     try:
-        graded = grade_crypto(c.sf, c.model, c.model_version_id, as_of, date.fromisoformat(c.cfg.crypto.history_start))
+        graded = grade_crypto(c.sf, c.model, c.model_version_id, as_of, start)
     except Exception as exc:  # noqa: BLE001 - keep the ingest result; report the grading failure
         log.exception("crypto grading failed")
         report.error(f"grading: {type(exc).__name__}: {exc}")
@@ -75,7 +76,28 @@ def run_crypto_and_grade(c: JobContext) -> Report:
 
     clear_chart_cache()
     report.errors += graded.errors
+    grade_shadows(c, report, lambda cfg, vid, sink: grade_crypto(c.sf, cfg, vid, as_of, start, None, sink))
     return report
+
+
+def grade_shadows(c: JobContext, report: Report, grade_fn) -> None:
+    """Grade every challenger in the shadow with the same data (chapter 8). Never shown; never active."""
+    from app.grading.crypto import SnapshotSink
+    from app.learning.registry import shadow_challengers
+
+    try:
+        with c.sf() as session:
+            shadows = shadow_challengers(session)
+    except Exception as exc:  # noqa: BLE001 - shadow grading never blocks the champion
+        report.error(f"schaduw: {type(exc).__name__}: {exc}")
+        return
+    for config, vid, _ in shadows:
+        try:
+            r = grade_fn(config, vid, SnapshotSink(regime_version_id=c.model_version_id))
+            report.add("shadow_snapshots_added", r.counts.get("snapshots_added", 0))
+        except Exception as exc:  # noqa: BLE001
+            log.exception("shadow grading %s failed", config.version)
+            report.error(f"schaduw {config.version}: {type(exc).__name__}: {exc}")
 
 
 def run_stocks_and_grade(c: JobContext) -> Report:
@@ -98,6 +120,7 @@ def run_stocks_and_grade(c: JobContext) -> Report:
 
     clear_chart_cache()
     report.errors += graded.errors
+    grade_shadows(c, report, lambda cfg, vid, sink: grade_stocks(c.sf, cfg, vid, c.stocks, as_of, None, sink))
     return report
 
 
@@ -125,6 +148,7 @@ def run_markets_and_grade(c: JobContext) -> Report:
 
     clear_chart_cache()
     report.errors += graded.errors
+    grade_shadows(c, report, lambda cfg, vid, sink: grade_markets(c.sf, cfg, vid, c.markets, as_of, None, sink))
     return report
 
 
@@ -135,9 +159,9 @@ def run_commodities_and_grade(c: JobContext) -> Report:
         report.error("Geen model- of grondstoffenconfiguratie geladen.")
         return report
     report = run_commodities(c.sf, c.providers, c.cfg, c.commodities)
+    as_of = last_trading_day(datetime.now(UTC))
     try:
-        graded = grade_commodities(c.sf, c.model, c.model_version_id, c.commodities,
-                                   last_trading_day(datetime.now(UTC)))
+        graded = grade_commodities(c.sf, c.model, c.model_version_id, c.commodities, as_of)
     except Exception as exc:  # noqa: BLE001 - keep the ingest result; report the grading failure
         log.exception("commodities grading failed")
         report.error(f"grading: {type(exc).__name__}: {exc}")
@@ -148,6 +172,8 @@ def run_commodities_and_grade(c: JobContext) -> Report:
 
     clear_chart_cache()
     report.errors += graded.errors
+    grade_shadows(c, report, lambda cfg, vid, sink: grade_commodities(c.sf, cfg, vid, c.commodities, as_of, None,
+                                                                       sink))
     return report
 
 
@@ -169,8 +195,65 @@ def run_evaluation(c: JobContext) -> Report:
         report.error("Geen model- of evaluatieconfiguratie geladen.")
         return report
     from app.evaluation.backtest import evaluate_live
+    from app.learning.promotion import run_checks
+    from app.learning.registry import shadow_challengers
 
-    return evaluate_live(c.sf, c.evaluation, c.model, c.model_version_id)
+    report = evaluate_live(c.sf, c.evaluation, c.model, c.model_version_id)
+    with c.sf() as session:
+        shadows = shadow_challengers(session)
+    for config, vid, cid in shadows:
+        r = evaluate_live(c.sf, c.evaluation, config, vid)
+        report.add("shadow_outcomes_added", r.counts.get("outcomes_added", 0))
+        with c.sf() as session:
+            checks = run_checks(session, c.evaluation, cid)
+        passed = sum(ch["passed"] for ch in checks)
+        report.notes.append(f"Uitdager {config.version}: {passed} van {len(checks)} toetsen gehaald.")
+    return report
+
+
+def run_quarterly(c: JobContext) -> Report:
+    """The quarterly round: weight proposals from the measurements, the review by the language model and the
+    analysis of misses. Only proposals come out of it (chapter 8 and 9)."""
+    report = Report()
+    if c.model is None or c.model_version_id is None or c.evaluation is None:
+        report.error("Geen model- of evaluatieconfiguratie geladen.")
+        return report
+    from app.learning.misses import analyse_misses
+    from app.learning.quarterly import quarterly_round
+    from app.learning.review import quarterly_review
+
+    with c.sf() as session:
+        quarterly_round(session, c.evaluation, c.model, c.model_version_id, report)
+        if c.ai is not None:
+            quarterly_review(session, c.ai, c.llm_client, c.evaluation, c.model, c.model_version_id, report)
+            analyse_misses(session, c.ai, c.llm_client, c.evaluation, c.model, c.model_version_id, report)
+    return report
+
+
+def run_challenger_backtests(c: JobContext) -> Report:
+    """Backtest the champion and every shadow challenger that has no finished backtest yet."""
+    report = Report()
+    if c.model is None or c.model_version_id is None or c.evaluation is None:
+        report.error("Geen model- of evaluatieconfiguratie geladen.")
+        return report
+    from app.evaluation.backtest import Backtest
+    from app.learning.promotion import latest_run
+    from app.learning.registry import shadow_challengers
+
+    with c.sf() as session:
+        todo = [(c.model, c.model_version_id)] + [(cfg, vid) for cfg, vid, _ in shadow_challengers(session)]
+        todo = [(cfg, vid) for cfg, vid in todo if latest_run(session, vid) is None]
+    bt_cfg = c.evaluation.raw["backtest"]
+    for config, vid in todo:
+        bt = Backtest(c.sf, config, vid, c.evaluation, date.fromisoformat(c.cfg.crypto.history_start), c.stocks,
+                      c.markets, c.commodities)
+        run_id, r = bt.run(date.fromisoformat(bt_cfg["start"] + "-01"), datetime.now(UTC).date(),
+                           list(bt_cfg["classes"]))
+        report.notes.append(f"Terugtest {run_id} voor modelversie {config.version}")
+        report.errors += r.errors[:20]
+    if not todo:
+        report.notes.append("Elke modelversie heeft al een terugtest.")
+    return report
 
 
 def run_backtest(c: JobContext) -> Report:
@@ -207,6 +290,8 @@ JOBS: dict[str, Callable[[JobContext], Report]] = {
     "explanations": run_explanations,
     "evaluation": run_evaluation,
     "backtest": run_backtest,
+    "quarterly": run_quarterly,
+    "challenger_backtests": run_challenger_backtests,
     "prune_raw": lambda c: run_prune(c.sf, c.cfg),
 }
 
@@ -219,6 +304,8 @@ JOB_LABELS_NL = {
     "explanations": "Toelichtingen (taalmodel, batch)",
     "evaluation": "Maandelijkse meting (live uitkomsten)",
     "backtest": "Terugtest (alle klassen, duurt uren)",
+    "quarterly": "Kwartaalronde (voorstellen, beoordeling, missers)",
+    "challenger_backtests": "Terugtest van uitdagers",
     "prune_raw": "Opruimen ruwe antwoorden",
 }
 
@@ -298,7 +385,8 @@ def _execute(ctx: JobContext, name: str, trigger: str) -> JobRun:
 def schedule_jobs(scheduler: BaseScheduler, ctx: JobContext) -> None:
     mapping = {"crypto": ["crypto"], "stocks": ["stocks"], "markets": ["markets"], "commodities": ["commodities"],
                "fx_macro": ["fx_macro"], "explanations": ["explanations"], "prune_raw": ["prune_raw"],
-               "evaluation": ["evaluation"]}
+               "evaluation": ["evaluation"], "quarterly": ["quarterly"],
+               "challenger_backtests": ["challenger_backtests"]}
     for key, expr in ctx.cfg.schedule.items():
         for job in mapping.get(key, []):
             scheduler.add_job(
