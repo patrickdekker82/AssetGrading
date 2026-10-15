@@ -19,7 +19,7 @@ from app.ingest.report import Report
 from app.ingest.store import insert_facts, insert_membership, upsert_bars
 from app.modelconfig import ModelConfig
 from app.models import Asset, AssetAlias, FundamentalFact, PriceBar
-from app.providers import Fact, ProviderError
+from app.providers import Fact, ProviderError, ProviderUnavailable
 from app.providers.config import ProvidersConfig
 from app.providers.registry import Providers
 from app.providers.stockprices import PriceSeries
@@ -43,6 +43,7 @@ class StockContext:
     report: Report
     only: set[int] | None = None
     last_filed: dict[int, str] | None = None   # asset id -> date of the newest filing (from this run)
+    insider_meta: dict[int, tuple[int, list[dict]]] | None = None   # asset id -> (CIK, recent Form 4 filings)
 
     @property
     def price_start(self) -> date:
@@ -57,7 +58,7 @@ def us_list_size(universes: Universes) -> int:
 def run_stocks(sf: sessionmaker[Session], providers: Providers, cfg: ProvidersConfig, stocks: StocksConfig,
                universes: Universes, model: ModelConfig, today: date | None = None) -> Report:
     ctx = StockContext(sf, providers, cfg, stocks, universes, model, today or datetime.now(UTC).date(), Report(),
-                       last_filed={})
+                       last_filed={}, insider_meta={})
     update_fx(sf, providers, cfg, ctx.report, ctx.today)
     try:
         sec_list = providers.get("sec").company_tickers()
@@ -70,6 +71,9 @@ def run_stocks(sf: sessionmaker[Session], providers: Providers, cfg: ProvidersCo
     sync_benchmarks(ctx)
     update_prices(ctx)
     update_fundamentals(ctx)
+    from app.ingest.insiders import update_insiders
+
+    update_insiders(ctx.sf, ctx.providers, ctx.cfg, ctx.insider_meta or {}, ctx.report, ctx.today)
     record_us_universe(ctx)
     record_aex_universe(ctx)
     return ctx.report
@@ -161,6 +165,8 @@ def sync_us_company(ctx: StockContext, row: dict) -> int | None:
         _set_alias(session, asset.id, "us_ticker", row["ticker"], "sec")
         _set_alias(session, asset.id, "yahoo_symbol", row["ticker"], "config")
         ctx.last_filed[asset.id] = _last_filing(meta)
+        if ctx.insider_meta is not None:
+            ctx.insider_meta[asset.id] = (row["cik"], meta.get("insider_filings") or [])
         session.commit()
         return asset.id
 
@@ -271,7 +277,7 @@ def update_prices(ctx: StockContext) -> None:
         work = [(a.id, a.slug, list(a.price_sources or ["yahoo"]), aliases(session, a.id))
                 for a in stock_targets(ctx, session)]
     for asset_id, slug, sources, al in work:
-        done = False
+        done = unavailable = False
         for source in sources:
             if not _available(ctx, source):
                 continue
@@ -282,10 +288,14 @@ def update_prices(ctx: StockContext) -> None:
                 _update_source(ctx, asset_id, source, symbol)
                 done = True
                 break
+            except ProviderUnavailable as exc:
+                ctx.report.unavailable(exc, "koersen van aandelen")
+                unavailable = True
+                continue
             except ProviderError as exc:
                 ctx.report.add(f"price_errors_{source}")
                 ctx.report.note_once(f"{source}: {exc}")
-        if not done:
+        if not done and not unavailable:
             ctx.report.error(f"geen koersen voor {slug}")
 
 

@@ -1,10 +1,11 @@
 # Indices (chapter 2: "circa 15 wereldwijde indices"; they also feed the market regime).
 # Prices from Yahoo Finance in the index's own currency. `curve`: which yield curve belongs to the market
 # (us = FRED, ea = ECB euro area AAA); `breadth`: the followed stock list used for "share above the
-# 200-day average" (only where the app follows the members); `world: true` marks the regime's world index.
+# 200-day average" (only where the app follows the members); `world: true` marks the regime's world index;
+# `valuation: shiller` fills the valuation pillar from Shiller's CAPE data (only the S&P 500 has a free source).
 indices:
   - {slug: msci-world, name: MSCI World, yahoo: "^990100-USD-STRD", currency: USD, region: Wereld, curve: us, world: true}
-  - {slug: sp500, name: S&P 500, yahoo: "^GSPC", currency: USD, region: Verenigde Staten, curve: us, breadth: stocks_us}
+  - {slug: sp500, name: S&P 500, yahoo: "^GSPC", currency: USD, region: Verenigde Staten, curve: us, breadth: stocks_us, valuation: shiller}
   - {slug: nasdaq-100, name: Nasdaq-100, yahoo: "^NDX", currency: USD, region: Verenigde Staten, curve: us}
   - {slug: dow-jones, name: Dow Jones Industrial Average, yahoo: "^DJI", currency: USD, region: Verenigde Staten, curve: us}
   - {slug: russell-2000, name: Russell 2000, yahoo: "^RUT", currency: USD, region: Verenigde Staten, curve: us}

@@ -1,5 +1,40 @@
 # Changelog
 
+## Vier gratis bronnen en Yahoo uitgewerkt (2026-10-15)
+
+### Nieuwe bronnen (geen nieuwe modelversie: alleen nieuwe invoer, elke grade bewaart zijn invoer)
+
+- **US Treasury**: de dagelijkse rentecurve (3 maanden tot 30 jaar, vanaf 1990) rechtstreeks van
+  home.treasury.gov, plus vijf extra looptijden van de ECB-curve. Obligatie-ETF's krijgen daarmee de maatstaf
+  **plek op de rentecurve**: carry plus roll-down per jaar duration, met de staatscurve van de fondsvaluta.
+- **Shiller**: de maandelijkse CAPE en excess CAPE yield van de S&P 500 (wekelijks gelezen; de link naar het
+  bestand komt van shillerdata.com). De S&P 500 krijgt zo een pijler **Waardering**, tegen de eigen historie.
+  Een maand telt pas een maand na afloop mee (ook in de terugtest).
+- **SEC Form 4**: transacties van bestuurders. Historie uit de kwartaalbestanden "Insider Transactions Data
+  Sets" (vanaf 2009, eenmalig een paar minuten), daarna per formulier uit de lijst die de aandelenrun al leest.
+  Maatstaf **aankopen bestuurders**: aantal bestuurders en directieleden met aankopen op de beurs in zes
+  maanden, zonder 10b5-1-plannen en zonder routinematige kopers (Cohen, Malloy en Pomorski). Leeg (niet nul)
+  buiten de VS of als de data het venster niet dekt.
+- **Marketaux**: met een gratis sleutel krijgt de kwartaalanalyse van grote missers de nieuwskoppen over het
+  bedrijf uit de maanden na de grade (prompt `miss-analysis-2`). Zonder sleutel verandert er niets.
+- Nieuwe tabellen `insider_filing`, `insider_dataset` en `news_item` (append-only), migratie 0012.
+- Grote antwoorden (de kwartaalzips) worden gelogd zonder inhoud (`raw_max_bytes` per bron).
+
+### Yahoo Finance
+
+- Besloten: Yahoo blijft de bron voor indices, ETF's, termijncontracten, ETC's en Europese aandelen (geen
+  gratis officieel alternatief), maar omkeerbaar: elke bron kan uit met `enabled: false` in
+  `config/providers.yaml`, en na vijf geweigerde aanvragen op rij pauzeert de app een bron zes uur en meldt dat
+  één keer in plaats van bij elke asset.
+
+### Controle
+
+- Terugtest 4 (model 0.6.0, 2010–nu) is klaar: 62.310 terugtestgrades, geen fouten, ijkvoorstel 4.
+- In de ontwikkelomgeving: Treasury en ECB 118.346 waarnemingen, insiders 67 kwartalen (114.192 rijen) plus
+  3.616 losse formulieren. Shiller kon hier alleen met een oude kopie worden getest (shillerdata.com is vanuit
+  de ontwikkelomgeving niet bereikbaar); de app markeert die terecht als te oud. Op de NAS haalt hij het actuele
+  bestand.
+
 ## Installatiehandleiding (2026-10-15)
 
 - **`docs/installatie.md`**: van niets naar een werkende app op de DS920+, met elke opdracht om te plakken

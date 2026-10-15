@@ -20,6 +20,16 @@ class Report:
         if message[:300] not in self.notes:
             self.notes.append(message[:300])
 
+    def unavailable(self, exc: Exception, what: str) -> None:
+        """A provider that is switched off is a note; one paused after refusals is an error, reported once."""
+        from app.providers import ProviderDisabled
+
+        message = f"{what}: {exc}"[:500]
+        if isinstance(exc, ProviderDisabled):
+            self.note_once(message)
+        elif message not in self.errors:
+            self.error(message)
+
     def as_dict(self) -> dict[str, Any]:
         return {"counts": self.counts, "errors": self.errors[:200], "error_count": len(self.errors),
                 "notes": self.notes}

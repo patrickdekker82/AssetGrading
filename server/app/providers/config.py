@@ -20,6 +20,8 @@ class ProviderEntry(_Strict):
     raw_retention_days: int = 400
     api_key_env: str | None = None
     attribution: str | None = None
+    raw_max_bytes: int | None = None
+    enabled: bool = True
 
 
 class CryptoSettings(_Strict):
@@ -51,11 +53,24 @@ class MacroSettings(_Strict):
     ecb_series: dict[str, dict[str, str]] = {}   # stored id -> {key, label}
 
 
+class InsiderSettings(_Strict):
+    history_start: str = "2009-07-01"     # first quarterly data set read (the backtest starts in 2010)
+    new_company_years: float = 4.0        # history fetched filing by filing for a company added later
+    max_filings_per_run: int = 3000       # single Form 4 filings fetched in one run at most
+
+
+class NewsSettings(_Strict):
+    per_miss: int = 10                    # articles fetched for one analysed miss
+    max_calls_per_run: int = 40           # of the free plan's 100 a day
+
+
 class ProvidersConfig(_Strict):
     providers: dict[str, ProviderEntry]
     crypto: CryptoSettings
     fx: FxSettings
     macro: MacroSettings
+    insider: InsiderSettings = InsiderSettings()
+    news: NewsSettings = NewsSettings()
     schedule: dict[str, str]
 
     def settings_for(self, name: str) -> ProviderSettings:
@@ -68,6 +83,8 @@ class ProvidersConfig(_Strict):
             raw_retention_days=e.raw_retention_days,
             api_key_env=e.api_key_env,
             attribution=e.attribution,
+            raw_max_bytes=e.raw_max_bytes,
+            enabled=e.enabled,
         )
 
 

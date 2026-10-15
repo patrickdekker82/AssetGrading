@@ -47,6 +47,19 @@ class NotSupported(ProviderError):
     """The adapter does not offer this kind of data."""
 
 
+class ProviderUnavailable(ProviderError):
+    """No call was made: the provider is switched off, or paused after repeated refusals. Callers stop their
+    loop over assets instead of reporting the same failure for each one."""
+
+
+class ProviderDisabled(ProviderUnavailable):
+    """Switched off in providers.yaml (`enabled: false`)."""
+
+
+class ProviderPaused(ProviderUnavailable):
+    """Paused after the provider refused several calls in a row (blocked or rate-limited)."""
+
+
 @dataclass(frozen=True)
 class RateLimit:
     calls: int
@@ -62,6 +75,8 @@ class ProviderSettings:
     raw_retention_days: int = 400
     api_key_env: str | None = None
     attribution: str | None = None
+    raw_max_bytes: int | None = None     # larger responses are logged without their body (big zip files)
+    enabled: bool = True
 
 
 @dataclass(frozen=True)
@@ -112,6 +127,7 @@ class CallRecorder(Protocol):
         content_type: str | None,
         duration_ms: int,
         started_at: datetime,
+        size: int | None = None,
     ) -> int | None: ...
 
     def month_usage(self, provider: str) -> int: ...
@@ -178,6 +194,10 @@ class Provider:
 
     name: str = "provider"
     max_attempts = 3
+    # After this many refused calls in a row (401, 403, 429 after retries) the adapter stops calling the
+    # provider for a while: a blocked source is not hammered, and the run reports it once.
+    refusals_before_pause = 5
+    pause_seconds = 6 * 3600
 
     def __init__(
         self,
@@ -195,6 +215,8 @@ class Provider:
         self.client = client or httpx.Client(timeout=60, headers={"User-Agent": "Graadmeter/0.1 (private research)"})
         self.limiter = limiter or RateLimiter(settings.rate_limit, sleep=sleep)
         self._sleep = sleep
+        self._refusals = 0
+        self._paused_until = 0.0
 
     # Uniform adapter interface (chapter 3, design rule 2). Adapters override what they support.
     def get_bars(self, symbol: str, start: date, end: date) -> list[Bar]:
@@ -228,11 +250,19 @@ class Provider:
         """Like get_json, for providers that answer in CSV or another text format."""
         return self._request("GET", path, params, cost=cost, text_body=True)
 
+    def get_bytes(self, path: str, params: dict[str, Any] | None = None, *, cost: int = 1) -> Response:
+        """Like get_json, for binary files (a spreadsheet, a zip): `data` is the raw body."""
+        return self._request("GET", path, params, cost=cost, raw_body=True)
+
     def post_json(self, path: str, payload: Any, *, cost: int = 1) -> Response:
         return self._request("POST", path, None, cost=cost, payload=payload)
 
     def _request(self, method: str, path: str, params: dict[str, Any] | None, *, cost: int,
-                 payload: Any = None, text_body: bool = False) -> Response:
+                 payload: Any = None, text_body: bool = False, raw_body: bool = False) -> Response:
+        if not self.settings.enabled:
+            raise ProviderDisabled(f"{self.name} staat uit (enabled: false in providers.yaml)")
+        if time.monotonic() < self._paused_until:
+            raise ProviderPaused(f"{self.name} gepauzeerd na {self.refusals_before_pause} geweigerde aanvragen op rij")
         url = path if path.startswith("http") else f"{self.settings.base_url}{path}"
         logged_params = {k: v for k, v in (params or {}).items() if k not in SECRET_PARAMS} or None
         endpoint = path.split("?")[0] if not path.startswith("http") else httpx.URL(path).path
@@ -265,12 +295,19 @@ class Provider:
             except httpx.HTTPError as exc:
                 error = f"{type(exc).__name__}: {exc}"
             duration_ms = int((time.monotonic() - t0) * 1000)
+            too_big = body is not None and self.settings.raw_max_bytes is not None \
+                and len(body) > self.settings.raw_max_bytes
             call_id = self.recorder.record(
                 provider=self.name, endpoint=endpoint, params=logged_params, status_code=status,
-                ok=error is None, error=error, cost=cost, body=body, content_type=content_type,
-                duration_ms=duration_ms, started_at=started,
+                ok=error is None, error=error, cost=cost, body=None if too_big else body,
+                content_type=content_type, duration_ms=duration_ms, started_at=started,
+                size=len(body) if body is not None else None,
             )
             if error is None:
+                self._refusals = 0
+                if raw_body:
+                    return Response(data=body or b"", call_id=call_id, status_code=status or 0,
+                                    headers=dict(res.headers))
                 if text_body:
                     return Response(data=(body or b"").decode("utf-8", "replace"), call_id=call_id,
                                     status_code=status or 0, headers=dict(res.headers))
@@ -284,6 +321,11 @@ class Provider:
             if not transient or attempt == self.max_attempts:
                 break
             self._sleep(retry_after if retry_after is not None else 2 ** attempt)
+        if last_status in (401, 403, 429):
+            self._refusals += 1
+            if self._refusals >= self.refusals_before_pause:
+                self._paused_until = time.monotonic() + self.pause_seconds
+                log.warning("%s paused after %d refused calls", self.name, self._refusals)
         raise ProviderError(f"{self.name} {endpoint}: {last_error}", last_status)
 
 

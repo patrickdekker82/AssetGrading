@@ -18,7 +18,10 @@ from app.providers.ecb import EcbProvider
 from app.providers.eia import EiaProvider
 from app.providers.frankfurter import FrankfurterProvider
 from app.providers.fred import FredProvider
+from app.providers.marketaux import MarketauxProvider
 from app.providers.sec import SecProvider
+from app.providers.sec_insider import SecInsiderProvider
+from app.providers.shiller import ShillerProvider
 from app.providers.stockprices import (
     EodhdProvider,
     OpenFigiProvider,
@@ -26,6 +29,7 @@ from app.providers.stockprices import (
     YahooFundProvider,
     YahooProvider,
 )
+from app.providers.treasury import TreasuryProvider
 from app.providers.venues import (
     BitvavoProvider,
     CoinbaseBookProvider,
@@ -52,6 +56,7 @@ ADAPTERS: dict[str, type[Provider]] = {
     "rugcheck": RugCheckProvider,
     "defillama_stablecoins": StablecoinSupplyProvider,
     "sec": SecProvider,
+    "sec_insider": SecInsiderProvider,
     "tiingo": TiingoProvider,
     "eodhd": EodhdProvider,
     "yahoo": YahooProvider,
@@ -61,6 +66,9 @@ ADAPTERS: dict[str, type[Provider]] = {
     "cftc": CftcProvider,
     "eia": EiaProvider,
     "worldbank": WorldBankProvider,
+    "treasury": TreasuryProvider,
+    "shiller": ShillerProvider,
+    "marketaux": MarketauxProvider,
 }
 
 

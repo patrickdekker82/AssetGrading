@@ -184,7 +184,7 @@ metrics:
     uitleg: "Huuropbrengst op de vastgoedwaarde min de rente op staatsleningen."
   cape_vs_history:
     label: "CAPE t.o.v. historie"
-    uitleg: "Koers gedeeld door de gemiddelde winst over tien jaar, vergeleken met de eigen historie."
+    uitleg: "Koers gedeeld door de gemiddelde winst over tien jaar (na inflatie), vergeleken met de eigen historie. Alleen voor de S&P 500, uit de data van Robert Shiller."
   carry_to_vol:
     label: "Carry per risico"
     uitleg: "Renteverschil tussen twee valuta gedeeld door de volatiliteit."
@@ -214,7 +214,7 @@ metrics:
     uitleg: "Saldo van handel en inkomen met het buitenland als deel van het bbp."
   curve_position_score:
     label: "Plek op de rentecurve"
-    uitleg: "Hoe aantrekkelijk de looptijd is gegeven de vorm van de rentecurve."
+    uitleg: "Hoe aantrekkelijk de looptijd is gegeven de vorm van de rentecurve: het extra rendement boven kort geld plus de koerswinst doordat de obligaties naar een kortere looptijd schuiven, per jaar duration. In procentpunt: hoeveel de rente in een jaar mag stijgen voordat het fonds slechter doet dan kort geld."
   curve_slope_annualized:
     label: "Helling termijncurve"
     uitleg: "Prijsverschil tussen nabije en verre termijncontracten op jaarbasis. Positief (backwardation) is gunstig."
@@ -262,7 +262,7 @@ metrics:
     uitleg: "Winst gedeeld door koers; het omgekeerde van de koers-winstverhouding."
   earnings_yield_minus_real_rate:
     label: "Winstrendement min reële rente"
-    uitleg: "Extra opbrengst van aandelen boven de rente na inflatie."
+    uitleg: "Extra opbrengst van aandelen boven de rente na inflatie: het winstrendement van de CAPE min de reële tienjaarsrente (de 'excess CAPE yield' van Shiller). Alleen voor de S&P 500."
   ebit_to_ev:
     label: "EBIT/EV"
     uitleg: "Bedrijfswinst gedeeld door de ondernemingswaarde (beurswaarde plus nettoschuld). Hoger is goedkoper."
@@ -331,7 +331,7 @@ metrics:
     uitleg: "Aantal posities in de index."
   insider_buying:
     label: "Aankopen bestuurders"
-    uitleg: "Niet-routinematige aankopen van eigen aandelen door bestuurders."
+    uitleg: "Aantal bestuurders en directieleden dat in de afgelopen zes maanden op de beurs aandelen van het eigen bedrijf kocht (SEC Form 4). Niet meegeteld: aankopen volgens een vooraf vastgelegd plan (10b5-1) en routinematige kopers die drie jaar op rij in dezelfde maand kochten. Alleen Amerikaanse bedrijven."
   interest_coverage:
     label: "Rentedekking"
     uitleg: "Bedrijfswinst gedeeld door rentelasten. Hoger is veiliger."

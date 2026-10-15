@@ -81,8 +81,35 @@ def update_macro(sf: sessionmaker[Session], providers: Providers, cfg: Providers
             session.commit()
 
 
+def update_treasury(sf: sessionmaker[Session], providers: Providers, cfg: ProvidersConfig, report: Report,
+                    today: date | None = None) -> None:
+    """The US Treasury par yield curve, one request per calendar year: the full history once, then the
+    previous and current year every run (late corrections at the turn of the year)."""
+    from app.providers.treasury import MATURITIES
+
+    if "treasury" not in cfg.providers:
+        return
+    today = today or datetime.now(UTC).date()
+    with sf() as session:
+        last = session.scalar(select(func.max(MacroObservation.date)).where(
+            MacroObservation.series_id == "UST_10Y", MacroObservation.source == "treasury"))
+    first = max(date.fromisoformat(cfg.macro.history_start).year, 1990)
+    start = max(last.year - 1, first) if last else first
+    for year in range(start, today.year + 1):
+        try:
+            curve = providers.get("treasury").year_curve(year)
+        except ProviderError as exc:
+            report.error(f"treasury {year}: {exc}")
+            continue
+        with sf() as session:
+            for sid, _ in MATURITIES.values():
+                report.add("macro_added", insert_macro(session, sid, "treasury", curve.get(sid, []), datetime.now(UTC)))
+            session.commit()
+
+
 def run_fx_macro(sf: sessionmaker[Session], providers: Providers, cfg: ProvidersConfig) -> Report:
     report = Report()
     update_fx(sf, providers, cfg, report)
     update_macro(sf, providers, cfg, report)
+    update_treasury(sf, providers, cfg, report)
     return report

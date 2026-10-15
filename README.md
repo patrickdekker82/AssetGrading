@@ -103,9 +103,9 @@ De rekenserver haalt elke nacht zelf data op (tijden in UTC, instelbaar in `conf
 | Taak | Wanneer | Wat |
 | --- | --- | --- |
 | Crypto | 00:05 | Top 50 van CoinGecko, dagkoersen (Coinbase → Binance → CoinGecko), marktwaarde, TVL en fees (DefiLlama), on-chain data (Coin Metrics) |
-| Markten | werkdagen 21:45 | Indices, ETF's en obligatie-ETF's (Yahoo), tien grootste posities (maandelijks), rentes (FRED, ECB), daarna het marktregime en de grades |
+| Markten | werkdagen 21:45 | Indices, ETF's en obligatie-ETF's (Yahoo), tien grootste posities (maandelijks), rentes (FRED, ECB) en de Amerikaanse rentecurve (US Treasury), CAPE van de S&P 500 (Shiller, wekelijks), daarna het marktregime en de grades |
 | Grondstoffen en valuta | werkdagen 22:00 | Termijncontracten en ETC's (Yahoo), CFTC-posities, EIA-voorraden (met sleutel), Wereldbank, rentes en reële wisselkoersen (FRED), valutaparen uit de ECB-koersen, daarna de grades |
-| Aandelen | werkdagen 22:30 | Grootste SEC-registranten met een 10-K en de AEX-fondsen, dagkoersen (Tiingo → Yahoo; EODHD als je die afneemt), SEC-cijfers na elke nieuwe publicatie en minstens maandelijks, daarna de grades |
+| Aandelen | werkdagen 22:30 | Grootste SEC-registranten met een 10-K en de AEX-fondsen, dagkoersen (Tiingo → Yahoo; EODHD als je die afneemt), SEC-cijfers na elke nieuwe publicatie en minstens maandelijks, transacties van bestuurders (SEC Form 4: de eerste keer de kwartaalbestanden vanaf 2009, daarna per formulier), daarna de grades |
 | Wisselkoersen en macro | werkdagen 16:30 | ECB-referentiekoersen (Frankfurter) en rentes, VIX en dollarindex (FRED) |
 | Opruimen | 03:30 | Ruwe antwoorden ouder dan de bewaartermijn per bron |
 
@@ -123,8 +123,26 @@ Sleutels in `.env`:
 | `SEC_USER_AGENT` | Verplicht voor SEC: een naam en **jouw** e-mailadres, bijvoorbeeld `"Graadmeter prive naam@voorbeeld.nl"` | SEC weigert de aanvragen |
 | `EODHD_API_KEY` | Betaald (EODHD), optioneel: Europese koersen | Europese koersen komen van Yahoo Finance |
 | `EIA_API_KEY` | Gratis sleutel van de EIA (Amerikaanse energiecijfers) | Geen voorraadcijfers voor olie en gas; de pijler Fundamentals blijft leeg |
+| `MARKETAUX_API_KEY` | Gratis sleutel van Marketaux (nieuws, 100 per dag) | De analyse van grote missers krijgt geen nieuwskoppen |
 
 Zonder sleutel slaat de app die bron over en meldt dat; verder werkt alles door.
+
+### Yahoo Finance
+
+Koersen van indices, ETF's, obligatie-ETF's, termijncontracten, ETC's en Europese aandelen komen van Yahoo
+Finance. Yahoo heeft daar geen officiële API voor en zijn voorwaarden staan geautomatiseerd ophalen niet
+uitdrukkelijk toe; er is voor die markten ook geen gratis officiële bron. De app blijft daarom Yahoo gebruiken,
+voorzichtig en omkeerbaar:
+
+- langzaam (één aanvraag per twee seconden, een paar honderd per nacht) en alleen dagkoersen;
+- weigert Yahoo vijf aanvragen op rij (geblokkeerd of te veel verzoeken), dan pauzeert de app Yahoo zes uur en
+  meldt dat één keer, in plaats van door te vragen;
+- **uitzetten** kan met één regel: `enabled: false` onder `yahoo` (en `yahoo_fund`) in `config/providers.yaml`.
+  De app slaat Yahoo dan over en meldt dat als opmerking. Let op: indices, ETF's, obligaties en grondstoffen
+  krijgen dan geen nieuwe koersen meer en hun grades verouderen; Amerikaanse aandelen lopen via Tiingo door,
+  Europese aandelen alleen met een EODHD-sleutel.
+
+Elke bron kan zo worden uitgezet.
 
 Elke run is veilig te herhalen: bestaande rijen worden nooit dubbel geschreven, en een herzien cijfer
 komt als nieuwe rij naast het oude (met het moment waarop het bekend werd).

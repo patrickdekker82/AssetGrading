@@ -21,6 +21,7 @@ class IndexEntry(_Strict):
     curve: str | None = None
     breadth: str | None = None
     world: bool = False
+    valuation: str | None = None     # "shiller": CAPE and excess CAPE yield from Shiller's data (S&P 500 only)
 
 
 class IndexGroup(_Strict):

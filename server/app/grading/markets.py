@@ -1,7 +1,7 @@
 """Grading of indices, ETFs and bond ETFs (chapter 6: Index, ETF, Obligatie).
 
-- Index: compared with its own history (trend, macro, breadth, volatility). No free source has index
-  earnings or CAPE, so the valuation pillar stays empty.
+- Index: compared with its own history (trend, macro, breadth, volatility). Valuation only for the S&P 500,
+  from Shiller's CAPE data; no free source has earnings or CAPE for the other indices.
 - ETF: the product, not the market in it. Compared only with ETFs on the same index. Tracking difference is
   the ETF's yearly total return in euro minus that of the index's total-return series (where free) or of the
   median ETF on the same index; ongoing charges stand in when the ETF is too young.
@@ -166,6 +166,39 @@ def realized_vol_series(closes: pd.Series) -> pd.Series:
     return (rets.rolling(VOL_ROWS).std(ddof=1) * math.sqrt(252)).dropna()
 
 
+SHILLER_LAG = timedelta(days=31)     # as in the ingest: a month's value is known a month after it ends
+SHILLER_FRESH_DAYS = 100             # the latest month plus one late update
+
+
+def known_daily(monthly: pd.Series, as_of: date) -> pd.Series:
+    """A monthly series as it was known on each weekday: every value from the day it became known (month end
+    plus the release lag), carried forward. Used as the index's own history for the percentile."""
+    known = pd.Series(monthly.to_numpy(), index=[d + SHILLER_LAG for d in monthly.index])
+    known = known[known.index <= as_of]
+    if known.empty:
+        return known
+    days = list(pd.bdate_range(known.index[0], as_of).date)
+    return known.reindex(sorted(set(known.index) | set(days))).ffill().reindex(days).dropna()
+
+
+def shiller_valuation(m: Metrics, data: MarketData) -> None:
+    """S&P 500 valuation from Shiller's data: the CAPE ratio and the excess CAPE yield (earnings yield of the
+    CAPE minus the real 10-year rate, his own calculation), each against the index's own history."""
+    pairs = (("cape_vs_history", "SHILLER_CAPE", "CAPE"),
+             ("earnings_yield_minus_real_rate", "SHILLER_ECY", "CAPE-winstrendement min reële rente"))
+    for metric, sid, label in pairs:
+        series = data.macro.get(sid)
+        if series is None or series.empty:
+            m.notes.append(f"{label}: nog geen data van Shiller")
+            continue
+        month = series.index[-1]
+        if (data.as_of - month).days > SHILLER_FRESH_DAYS:
+            m.notes.append(f"{label}: de laatste maand van Shiller ({month:%m-%Y}) is te oud en telt niet mee")
+            continue
+        m.set(metric, float(series.iloc[-1]), f"{label}, Shiller, maand {month:%m-%Y}")
+        m.history[metric] = known_daily(series, data.as_of)
+
+
 def prepare_indices(data: MarketData, config: ModelConfig) -> list[Prepared]:
     out = []
     for a in (x for x in data.assets if x.asset_class == "index"):
@@ -188,7 +221,11 @@ def prepare_indices(data: MarketData, config: ModelConfig) -> list[Prepared]:
             n = len(data.members.get(a.categories.get("breadth") or "", []))
             m.set("pct_above_sma200", float(breadth.iloc[-1]), f"{n} gevolgde aandelen uit deze markt")
             m.history["pct_above_sma200"] = breadth
-        m.notes.append("geen gratis bron voor winst of CAPE van indices: de pijler Waardering blijft leeg")
+        if a.categories.get("valuation") == "shiller":
+            shiller_valuation(m, data)
+        else:
+            m.notes.append("geen gratis bron voor winst of CAPE van deze index: de pijler Waardering blijft leeg "
+                           "(alleen de S&P 500 heeft er een, de data van Shiller)")
         p = Prepared(a.id, a.slug, "index", [], m, price_eur=_last_eur(data, a.id))
         out.append(p)
     # In euro: an index in yen or pounds is compared with MSCI World (in dollars) only after conversion
@@ -359,6 +396,44 @@ def govt_yield(data: MarketData, currency: str, duration: float) -> float | None
     return y2 + w * (y10 - y2)
 
 
+# Government curves per currency: (stored series, maturity in years). US from the Treasury, euro area AAA from
+# the ECB. A curve counts when at least four points are fresh and the shortest is a year or less.
+CURVES = {
+    "USD": [("UST_3M", 0.25), ("UST_6M", 0.5), ("UST_1Y", 1.0), ("UST_2Y", 2.0), ("UST_3Y", 3.0), ("UST_5Y", 5.0),
+            ("UST_7Y", 7.0), ("UST_10Y", 10.0), ("UST_20Y", 20.0), ("UST_30Y", 30.0)],
+    "EUR": [("EA_AAA_3M", 0.25), ("EA_AAA_1Y", 1.0), ("EA_AAA_2Y", 2.0), ("EA_AAA_5Y", 5.0), ("EA_AAA_10Y", 10.0),
+            ("EA_AAA_20Y", 20.0), ("EA_AAA_30Y", 30.0)],
+}
+CURVE_STALE_DAYS = 10
+
+
+def curve_points(data: MarketData, currency: str) -> list[tuple[float, float]] | None:
+    """[(maturity in years, yield in percent)] of the latest government curve, or None."""
+    points = []
+    for sid, years in CURVES.get(currency, []):
+        s = data.macro.get(sid)
+        if s is not None and not s.empty and (data.as_of - s.index[-1]).days <= CURVE_STALE_DAYS:
+            points.append((years, float(s.iloc[-1])))
+    return points if len(points) >= 4 and points[0][0] <= 1.0 else None
+
+
+def yield_at(points: list[tuple[float, float]], years: float) -> float:
+    """Straight line between curve points; flat beyond the shortest and longest maturity."""
+    return float(np.interp(years, [p[0] for p in points], [p[1] for p in points]))
+
+
+def curve_position(points: list[tuple[float, float]], duration: float) -> float:
+    """How attractive the fund's spot on the curve is (chapter 6, Obligatie, renterisico): the yearly carry
+    (yield at the duration minus the shortest yield) plus the roll-down (the price gain as the bonds age along
+    the curve), per year of duration. In percentage points: how far yields could rise in a year before the
+    position does worse than cash. A steep curve at the fund's maturity scores high, an inverted one low."""
+    step = min(1.0, duration / 2)
+    y = yield_at(points, duration)
+    carry = y - points[0][1]
+    roll = duration * (y - yield_at(points, duration - step)) / step
+    return (carry + roll) / duration
+
+
 def prepare_bonds(data: MarketData, config: ModelConfig) -> list[Prepared]:
     s = config.settings.bond
     out = []
@@ -385,11 +460,16 @@ def prepare_bonds(data: MarketData, config: ModelConfig) -> list[Prepared]:
             if loss is not None and ter is not None:
                 m.set("expected_net_yield", ytm - loss - ter, f"rendement {ytm:.2%} min wanbetaling en kosten; {src}")
             duration = f.get("duration", (None, None))[1]
+            currency = c.get("fund_currency") or "USD"   # currency of the bonds, or of the hedge
             if duration is not None:
                 m.set("duration", duration, src)
                 if duration >= 0.25:
                     m.set("yield_per_duration", ytm / duration, src)
-            currency = c.get("fund_currency") or "USD"   # currency of the bonds, or of the hedge
+                    points = curve_points(data, currency)
+                    if points is not None:
+                        m.set("curve_position_score", curve_position(points, duration),
+                              f"carry en roll-down per jaar duration, staatscurve {currency} "
+                              f"({'US Treasury' if currency == 'USD' else 'ECB AAA'})")
             if "government" in tags and currency == "USD":
                 be = data.macro.get("T10YIE" if (duration or 0) > 7 else "T5YIE")
                 if be is not None and not be.empty:

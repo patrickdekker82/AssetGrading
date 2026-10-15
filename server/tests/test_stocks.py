@@ -89,10 +89,62 @@ def chart(symbol: str, p1: int, p2: int) -> dict:
     }], "error": None}}
 
 
+FORM4_FILED = TODAY - timedelta(days=10)
+
+
+def insider_zip(quarter: str) -> bytes:
+    """A quarterly SEC insider data set with one director purchase at company 1, filed mid-quarter."""
+    import io
+    import zipfile
+
+    from app.ingest.insiders import quarter_end
+
+    end = quarter_end(quarter)
+    filed = (end - timedelta(days=45)).strftime("%d-%b-%Y").upper()
+    acc = f"0000000009-{quarter}"
+    files = {
+        "SUBMISSION.tsv": "ACCESSION_NUMBER\tFILING_DATE\tDOCUMENT_TYPE\tISSUERCIK\tAFF10B5ONE\n"
+                          f"{acc}\t{filed}\t4\t0000000001\t0\n{acc}-x\t{filed}\t4\t0000000777\t0\n",
+        "REPORTINGOWNER.tsv": "ACCESSION_NUMBER\tRPTOWNERCIK\tRPTOWNERNAME\tRPTOWNER_RELATIONSHIP\n"
+                              f"{acc}\t0000000555\tDirector Dan\tDirector\n",
+        "NONDERIV_TRANS.tsv": "ACCESSION_NUMBER\tTRANS_DATE\tTRANS_CODE\tTRANS_SHARES\tTRANS_PRICEPERSHARE\t"
+                              "TRANS_ACQUIRED_DISP_CD\n"
+                              f"{acc}\t{filed}\tP\t100\t50\tA\n{acc}\t{filed}\tS\t10\t55\tD\n",
+    }
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        for name, body in files.items():
+            z.writestr(name, body)
+    return buf.getvalue()
+
+
+FORM4_XML = f"""<?xml version="1.0"?><ownershipDocument><documentType>4</documentType>
+<issuer><issuerCik>0000000001</issuerCik></issuer>
+<reportingOwner><reportingOwnerId><rptOwnerCik>0000000666</rptOwnerCik><rptOwnerName>Officer Olga</rptOwnerName>
+</reportingOwnerId><reportingOwnerRelationship><isDirector>0</isDirector><isOfficer>1</isOfficer>
+<isTenPercentOwner>0</isTenPercentOwner></reportingOwnerRelationship></reportingOwner>
+<aff10b5One>0</aff10b5One>
+<nonDerivativeTable><nonDerivativeTransaction><transactionDate><value>{FORM4_FILED - timedelta(days=2)}</value>
+</transactionDate><transactionCoding><transactionCode>P</transactionCode></transactionCoding><transactionAmounts>
+<transactionShares><value>200</value></transactionShares><transactionPricePerShare><value>40</value>
+</transactionPricePerShare><transactionAcquiredDisposedCode><value>A</value></transactionAcquiredDisposedCode>
+</transactionAmounts></nonDerivativeTransaction></nonDerivativeTable></ownershipDocument>"""
+
+
 def fake_markets(request: httpx.Request) -> httpx.Response:
     host, path = request.url.host, request.url.path
     if host == "www.sec.gov":
         assert "@" in request.headers["user-agent"]
+        if "insider-transactions-data-sets" in path:
+            from app.ingest.insiders import quarter_end
+
+            quarter = path.rsplit("/", 1)[1].split("_")[0]
+            if quarter_end(quarter) >= TODAY - timedelta(days=45):
+                return httpx.Response(404, text="not published")
+            return httpx.Response(200, content=insider_zip(quarter))
+        if "/Archives/edgar/data/" in path:
+            assert path.endswith("/form4.xml")       # the raw XML, not the style-sheet page
+            return httpx.Response(200, text=FORM4_XML)
         return httpx.Response(200, json=TICKERS)
     if host == "data.sec.gov":
         cik = int(path.split("CIK")[1].split(".")[0])
@@ -102,8 +154,12 @@ def fake_markets(request: httpx.Request) -> httpx.Response:
                 "name": name, "sic": sic, "sicDescription": "x", "tickers": [], "exchanges": [],
                 "addresses": {"business": {"isForeignLocation": 1 if cik == 3 else 0,
                                            "countryCode": "GB" if cik == 3 else None}},
-                "filings": {"recent": {"form": [form], "filingDate": [f"{TODAY.year}-02-15"],
-                                       "reportDate": [f"{TODAY.year - 1}-12-31"]}},
+                "filings": {"recent": {"form": [form, "4"],
+                                       "filingDate": [f"{TODAY.year}-02-15", FORM4_FILED.isoformat()],
+                                       "reportDate": [f"{TODAY.year - 1}-12-31", ""],
+                                       "accessionNumber": [f"000000000{cik}-10k", f"000000000{cik}-f4"],
+                                       "acceptanceDateTime": ["", f"{FORM4_FILED.isoformat()}T21:00:00.000Z"],
+                                       "primaryDocument": ["10k.htm", "xslF345X06/form4.xml"]}},
             })
         return httpx.Response(200, json=company_facts(cik))
     if host == "api.openfigi.com":
@@ -144,7 +200,8 @@ def stock_world(config_dir, db):  # noqa: F811
     fast = {name: e.model_copy(update={"rate_limit": {"calls": 10_000, "per_seconds": 1}})
             for name, e in cfg.providers.items()}
     macro = cfg.macro.model_copy(update={"history_start": (TODAY - timedelta(days=800)).isoformat()})
-    cfg = cfg.model_copy(update={"fx": fx, "providers": fast, "macro": macro})
+    insider = cfg.insider.model_copy(update={"history_start": (TODAY - timedelta(days=400)).isoformat()})
+    cfg = cfg.model_copy(update={"fx": fx, "providers": fast, "macro": macro, "insider": insider})
     stocks = load_stocks_config(config_dir / "stocks.yaml")
     aex = stocks.aex.model_copy(update={"members": [m for m in stocks.aex.members if m.ticker in ("ABN", "HEIA")]})
     stocks = stocks.model_copy(update={"aex": aex})
@@ -265,3 +322,27 @@ def test_last_trading_day(now, expected):
 def scalar_rows(engine, sql):
     with engine.connect() as conn:
         return [tuple(r) for r in conn.execute(text(sql))]
+
+
+def test_insider_filings_from_data_sets_and_single_forms(db, stock_world, model):  # noqa: F811
+    """History from the quarterly data sets, recent filings one by one, and the metric from both."""
+    engine, sf = db
+    cfg, providers, stocks, universes = stock_world
+    report = run_stocks(sf, providers, cfg, stocks, universes, model, today=TODAY)
+    assert not [e for e in report.errors if "insider" in e], report.errors
+    rows = {r.source: r.n for r in engine.connect().execute(text(
+        "SELECT source, count(*) AS n FROM insider_filing GROUP BY source"))}
+    published = scalar(engine, "SELECT count(*) FROM insider_dataset")
+    assert published >= 3 and rows.get("sec_bulk") == published     # one row per quarter, company 1 only
+    assert rows.get("sec_form4", 0) >= 1                              # each US company lists the Form 4
+    # Run again: nothing is fetched or stored twice.
+    run_stocks(sf, providers, cfg, stocks, universes, model, today=TODAY)
+    assert scalar(engine, "SELECT count(*) FROM insider_filing") == sum(rows.values())
+    with sf() as session:
+        from app.grading.stocks import load_stock_data, prepare
+
+        data = load_stock_data(session, stocks, TODAY, datetime.now(UTC))
+    by_slug = {p.key: p.metrics.values.get("insider_buying") for p in prepare(data, model)}
+    assert by_slug["aaa"] >= 1           # the officer's purchase ten days ago (and the director's, if recent)
+    aex = [k for k in by_slug if k.endswith("-as")]
+    assert aex and all(by_slug[k] is None for k in aex)    # no Form 4 outside the US: empty, not zero

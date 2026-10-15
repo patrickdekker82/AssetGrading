@@ -24,7 +24,8 @@ YESTERDAY = TODAY - timedelta(days=1)
 DATA_TABLES = ("price_bar", "fundamental_fact", "universe_membership", "asset_alias", "asset", "fx_rate",
                "macro_observation", "provider_response", "provider_call_log", "job_run", "grade_snapshot",
                "market_regime", "llm_batch", "backtest_run", "model_proposal", "evaluation", "model_activation",
-               "challenger", "qualitative_assessment", "notification", "model_version")
+               "challenger", "qualitative_assessment", "notification", "insider_filing", "insider_dataset",
+               "news_item", "model_version")
 
 
 def ms(d: date) -> int:
@@ -60,6 +61,12 @@ def fake_world(request: httpx.Request) -> httpx.Response:
     if host == "data-api.ecb.europa.eu":
         body = "KEY,TIME_PERIOD,OBS_VALUE\n" + "".join(
             f"x,{d.isoformat()},2.5\n" for d in days(TODAY - timedelta(days=10), YESTERDAY) if d.weekday() < 5)
+        return httpx.Response(200, text=body, headers={"content-type": "text/csv"})
+    if host == "home.treasury.gov":
+        year = int(path.split("daily-treasury-rates.csv/")[1].split("/")[0])
+        rows = [d for d in days(TODAY - timedelta(days=30), YESTERDAY) if d.year == year and d.weekday() < 5]
+        body = 'Date,"3 Mo","1 Yr","2 Yr","5 Yr","10 Yr","30 Yr"\n' + "".join(
+            f"{d:%m/%d/%Y},4.0,3.9,3.8,3.9,4.2,4.5\n" for d in reversed(rows))
         return httpx.Response(200, text=body, headers={"content-type": "text/csv"})
     if host == "api.frankfurter.dev":
         start, end = (date.fromisoformat(x) for x in path.removeprefix("/v1/").split(".."))

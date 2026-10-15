@@ -226,7 +226,11 @@ def run_quarterly(c: JobContext) -> Report:
         quarterly_round(session, c.evaluation, c.model, c.model_version_id, report)
         if c.ai is not None:
             quarterly_review(session, c.ai, c.llm_client, c.evaluation, c.model, c.model_version_id, report)
-            analyse_misses(session, c.ai, c.llm_client, c.evaluation, c.model, c.model_version_id, report)
+            from app.learning.news import news_fetcher
+
+            news = news_fetcher(session, c.providers, c.cfg, report)
+            analyse_misses(session, c.ai, c.llm_client, c.evaluation, c.model, c.model_version_id, report,
+                           news=news)
     return report
 
 

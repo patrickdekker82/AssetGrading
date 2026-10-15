@@ -33,11 +33,13 @@ class DbRecorder:
         content_type: str | None,
         duration_ms: int,
         started_at: datetime,
+        size: int | None = None,
     ) -> int:
         with self.session_factory() as session:
             row = ProviderCallLog(
                 provider=provider, endpoint=endpoint[:200], params=params, status_code=status_code, ok=ok,
-                error=error, cost=cost, response_bytes=len(body) if body is not None else None,
+                error=error, cost=cost,
+                response_bytes=size if size is not None else (len(body) if body is not None else None),
                 duration_ms=duration_ms, started_at=started_at, job_run_id=current_job_run.get(),
             )
             session.add(row)

@@ -93,6 +93,14 @@ providers:
     rate_limit: {calls: 5, per_seconds: 1}
     monthly_budget: null
     raw_retention_days: 45       # company facts are several MB per company; re-read monthly anyway
+  sec_insider:
+    base_url: https://www.sec.gov
+    # Form 4 insider filings: quarterly data sets (zip, 5-20 MB, history) and single filings (recent).
+    # Shares SEC's limit of 10 requests a second with `sec` (5 + 4).
+    rate_limit: {calls: 4, per_seconds: 1}
+    monthly_budget: null
+    raw_retention_days: 30
+    raw_max_bytes: 1000000       # the zips are not kept; their rows are
   tiingo:
     base_url: https://api.tiingo.com
     api_key_env: TIINGO_API_KEY
@@ -118,6 +126,25 @@ providers:
     rate_limit: {calls: 2, per_seconds: 1}
     monthly_budget: null
     raw_retention_days: 90
+  treasury:
+    base_url: https://home.treasury.gov
+    # US Treasury par yield curve: one CSV per year, public domain. Kept slow; a run needs one or two calls.
+    rate_limit: {calls: 1, per_seconds: 2}
+    monthly_budget: null
+    raw_retention_days: 30
+  shiller:
+    base_url: https://shillerdata.com
+    # Robert Shiller's monthly S&P 500 data (CAPE). Read at most weekly; the spreadsheet is about 1.5 MB.
+    rate_limit: {calls: 1, per_seconds: 5}
+    monthly_budget: null
+    raw_retention_days: 60
+  marketaux:
+    base_url: https://api.marketaux.com
+    api_key_env: MARKETAUX_API_KEY
+    # Free plan: 100 requests a day, three articles each. Only for the quarterly analysis of misses.
+    rate_limit: {calls: 1, per_seconds: 1}
+    monthly_budget: 2500
+    raw_retention_days: 400
   yahoo_fund:
     base_url: https://query2.finance.yahoo.com
     rate_limit: {calls: 1, per_seconds: 2}
@@ -179,6 +206,17 @@ fx:
   currencies: [USD, GBP, CHF, JPY, CAD, AUD, NOK, SEK, DKK, CNY, HKD, SGD, PLN, INR]
   history_start: "2010-01-01"
 
+# Insider transactions (SEC Form 4): quarterly data sets from history_start, then single filings.
+insider:
+  history_start: "2009-07-01"
+  new_company_years: 4
+  max_filings_per_run: 3000
+
+# News (Marketaux, free key: 100 requests a day) for the analysis of large misses only.
+news:
+  per_miss: 10
+  max_calls_per_run: 40
+
 macro:
   history_start: "1990-01-01"
   fred_series:
@@ -196,8 +234,13 @@ macro:
     T5YIE: Verwachte inflatie 5 jaar (VS)
   # ECB yield curve for AAA-rated euro area government bonds (spot rates).
   ecb_series:
+    EA_AAA_3M: {key: "YC/B.U2.EUR.4F.G_N_A.SV_C_YM.SR_3M", label: "Rente staatsobligaties 3 maanden (eurozone, AAA)"}
+    EA_AAA_1Y: {key: "YC/B.U2.EUR.4F.G_N_A.SV_C_YM.SR_1Y", label: "Rente staatsobligaties 1 jaar (eurozone, AAA)"}
     EA_AAA_2Y: {key: "YC/B.U2.EUR.4F.G_N_A.SV_C_YM.SR_2Y", label: "Rente staatsobligaties 2 jaar (eurozone, AAA)"}
+    EA_AAA_5Y: {key: "YC/B.U2.EUR.4F.G_N_A.SV_C_YM.SR_5Y", label: "Rente staatsobligaties 5 jaar (eurozone, AAA)"}
     EA_AAA_10Y: {key: "YC/B.U2.EUR.4F.G_N_A.SV_C_YM.SR_10Y", label: "Rente staatsobligaties 10 jaar (eurozone, AAA)"}
+    EA_AAA_20Y: {key: "YC/B.U2.EUR.4F.G_N_A.SV_C_YM.SR_20Y", label: "Rente staatsobligaties 20 jaar (eurozone, AAA)"}
+    EA_AAA_30Y: {key: "YC/B.U2.EUR.4F.G_N_A.SV_C_YM.SR_30Y", label: "Rente staatsobligaties 30 jaar (eurozone, AAA)"}
 
 schedule:                            # UTC
   crypto: "5 0 * * *"                # 00:05, after the daily close

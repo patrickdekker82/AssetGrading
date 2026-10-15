@@ -235,13 +235,21 @@ class SecProvider(Provider):
                                  strict=False)
             if f in FILING_FORMS
         ]
+        # Form 4 insider filings in the recent list (the newest 1,000 filings of any kind).
+        insider = [
+            {"accession": a, "filed": fd, "accepted": acc, "primary": doc}
+            for f, a, fd, acc, doc in zip(recent.get("form", []), recent.get("accessionNumber", []),
+                                          recent.get("filingDate", []), recent.get("acceptanceDateTime", []),
+                                          recent.get("primaryDocument", []), strict=False)
+            if f == "4" and a and doc
+        ]
         business = (d.get("addresses") or {}).get("business") or {}
         return {
             "cik": cik, "name": d.get("name"), "sic": int(d["sic"]) if d.get("sic") else None,
             "sic_description": d.get("sicDescription"), "tickers": d.get("tickers") or [],
             "exchanges": d.get("exchanges") or [], "fiscal_year_end": d.get("fiscalYearEnd"),
             "foreign": bool(business.get("isForeignLocation")), "country_code": business.get("countryCode"),
-            "filings": filings, "call_id": res.call_id,
+            "filings": filings, "insider_filings": insider, "call_id": res.call_id,
         }
 
     def get_fundamentals(self, symbol: str, start: date | None = None) -> list[Fact]:

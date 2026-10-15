@@ -26,7 +26,9 @@ from app.grading.fundamentals import (
     valuation_inputs,
     valuation_metrics,
 )
+from app.grading.insiders import HISTORY_DAYS, INSIDER_MAX_GAP_DAYS, WINDOW_DAYS, insider_buyers
 from app.grading.technical import TechRaw, tech_raw, tech_scores
+from app.ingest.insiders import quarter_end
 from app.ingest.report import Report
 from app.modelconfig import ModelConfig
 from app.stocks_config import StocksConfig
@@ -48,6 +50,7 @@ class StockRow:
     sic: int | None
     benchmark: str          # slug of the index the stock is compared with
     multiplier: float = 1.0
+    us: bool = False        # a US company: files Form 4 (insider transactions)
 
 
 @dataclass
@@ -63,6 +66,9 @@ class StockData:
     benchmarks: dict[str, pd.Series]
     fx: pd.DataFrame                          # index date, columns currency -> units per EUR
     manual_shares: dict[int, list[tuple[datetime, float]]] = field(default_factory=dict)  # (known from, count)
+    insiders: dict[int, pd.DataFrame] = field(default_factory=dict)   # Form 4 purchases known on the day
+    insider_from: date | None = None          # first day covered by the insider data
+    insider_until: date | None = None         # last day covered (data set quarters, then single filings)
 
     def rate(self, currency: str, day: date) -> float | None:
         if currency == "EUR":
@@ -96,7 +102,7 @@ def load_stock_data(session: Session, stocks_cfg: StocksConfig, as_of: date, kno
     for r in rows:
         sic = next((int(c[4:]) for c in (r.categories or []) if isinstance(c, str) and c.startswith("sic:")), None)
         stocks.append(StockRow(r.id, r.slug, r.symbol, sic, us_bench if r.us else aex_bench,
-                               multipliers.get(r.slug, 1.0)))
+                               multipliers.get(r.slug, 1.0), bool(r.us)))
 
     facts_df = pd.read_sql(text(
         """
@@ -144,6 +150,28 @@ def load_stock_data(session: Session, stocks_cfg: StocksConfig, as_of: date, kno
     ), params):
         manual.setdefault(r.asset_id, []).append((r.available_at, r.value))
 
+    ins = pd.read_sql(text(
+        """
+        SELECT asset_id, owner_cik, is_director, is_officer, plan_10b5_1, first_trade, last_trade,
+               purchase_value::float8 AS purchase_value
+        FROM insider_filing
+        WHERE filed_at <= :k AND purchase_value > 0 AND coalesce(last_trade, first_trade) <= :d
+          AND coalesce(last_trade, first_trade) >= :ins_start
+        """
+    ), conn, params={**params, "ins_start": as_of - timedelta(days=HISTORY_DAYS)})
+    for col in ("first_trade", "last_trade"):
+        ins[col] = pd.to_datetime(ins[col]).dt.date
+    insiders = {int(k): g.drop(columns="asset_id") for k, g in ins.groupby("asset_id")}
+    quarters = session.execute(text("SELECT min(quarter), max(quarter) FROM insider_dataset")).one()
+    insider_from = date(int(quarters[0][:4]), (int(quarters[0][5]) - 1) * 3 + 1, 1) if quarters[0] else None
+    insider_until = quarter_end(quarters[1]) if quarters[1] else None
+    # After the last data set: covered up to the newest single filing known then (across all companies a
+    # Form 4 arrives every few days, so a gap means the single filings were not fetched).
+    newest = session.execute(text(
+        "SELECT max(filed_at) FROM insider_filing WHERE source = 'sec_form4' AND filed_at <= :k"), params).scalar()
+    if newest is not None and (insider_until is None or newest.date() > insider_until):
+        insider_until = newest.date()
+
     fx = pd.read_sql(text(
         "SELECT date, quote, rate::float8 AS rate FROM fx_rate WHERE base = 'EUR' AND date <= :d "
         "AND date >= :fx_start ORDER BY date"
@@ -152,7 +180,15 @@ def load_stock_data(session: Session, stocks_cfg: StocksConfig, as_of: date, kno
     if not fx_table.empty:
         fx_table.index = pd.to_datetime(fx_table.index).date
     return StockData(as_of, knowledge, stocks, facts, raw_closes, raw_currency, closes, closes_eur, benchmarks,
-                     fx_table, manual)
+                     fx_table, manual, insiders, insider_from, insider_until)
+
+
+def insider_covered(data: StockData) -> bool:
+    """The insider data spans the whole window up to (nearly) the grading day; otherwise zero buyers could
+    simply be missing filings, and the metric stays empty."""
+    return (data.insider_from is not None and data.insider_until is not None
+            and data.insider_from <= data.as_of - timedelta(days=WINDOW_DAYS)
+            and data.insider_until >= data.as_of - timedelta(days=INSIDER_MAX_GAP_DAYS))
 
 
 def manual_share_count(data: StockData, asset_id: int, day: date) -> float | None:
@@ -297,6 +333,10 @@ def prepare(data: StockData, config: ModelConfig) -> list[Prepared]:
                 if (vi["tce"] or 0) > 0 and mv.value:
                     m.raw["ptbv"] = mv.value / vi["tce"]
                     m.raw["rotce"] = res.values.get("rotce")
+        if s.us and insider_covered(data):
+            n = insider_buyers(data.insiders.get(s.id), data.as_of)
+            m.set("insider_buying", n, "bestuurders met aankopen in 6 maanden (SEC Form 4; zonder 10b5-1-plannen "
+                                       "en routinematige kopers)")
         beta, vol = beta_and_volatility(data.closes.get(s.id), data.benchmarks.get(s.benchmark), data.as_of)
         m.set("beta", beta, f"weekrendementen 3 jaar t.o.v. {s.benchmark}")
         m.set("volatility", vol, "dagrendementen 1 jaar")

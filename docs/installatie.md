@@ -47,6 +47,7 @@ script er één voor één om. Een sleutel die je nog niet hebt kun je overslaan
 | A5 | **SEC** | Ja (aandelen) | Geen account: alleen je naam en e-mailadres | – |
 | A6 | **Anthropic** | Optioneel (toelichtingen) | <https://console.anthropic.com> → *Settings* → *Billing*: minimaal tegoed kopen en een *spend limit* zetten → *API keys* → *Create Key* | Begint met `sk-ant-` |
 | A7 | **Meldingen via ntfy** | Aanbevolen | Installeer de app **ntfy** op je telefoon → **+** → bedenk een lange, geheime naam (bijv. `graadmeter-k7f2q9xw4m`) → *Subscribe* | Je webhook is `https://ntfy.sh/graadmeter-k7f2q9xw4m` |
+| A8 | **Marketaux** | Optioneel (nieuws bij missers) | <https://www.marketaux.com/register> → gratis account → *Dashboard* → *API Token* | Lange reeks letters en cijfers |
 
 Over A1 en A2: de CoinGecko- en FRED-sleutel die je al eerder gaf werken ook; die hoef je niet opnieuw aan te
 vragen.
@@ -284,8 +285,8 @@ De containers starten na een herstart van de NAS vanzelf weer op.
 
 `scripts/nas-check.sh` draait alle nachtelijke taken achter elkaar (wisselkoersen, markten, grondstoffen,
 aandelen, crypto, toelichtingen, opruimen, back-up) en meet ondertussen het geheugen per container. De eerste
-keer haalt hij ook alle historie op en duurt hij langer dan een gewone nacht. Start hem zo dat hij doorloopt als
-je de Terminal sluit:
+keer haalt hij ook alle historie op (koersen, cijfers, de rentecurve vanaf 1990 en de transacties van bestuurders
+vanaf 2009) en duurt hij langer dan een gewone nacht. Start hem zo dat hij doorloopt als je de Terminal sluit:
 
 ```bash
 cd /volume1/docker/graadmeter && nohup scripts/nas-check.sh > nas-check-1.log 2>&1 &
@@ -458,35 +459,50 @@ tekst. Zie je `"explanations_rejected"` of `"explanations_template"`, dan heeft 
 (bijvoorbeeld een getal dat niet in de cijfers stond) en toont de app de vaste sjabloontekst; dat is juist de
 bedoeling. Een fout over de sleutel betekent dat `ANTHROPIC_API_KEY` ontbreekt of niet klopt (J7). Het verbruik in euro staat onder 🌐 **Instellingen** → *Taalmodel*.
 
-### H3. Beslissing: Yahoo Finance als bron
+### H3. Yahoo Finance: besloten, blijft aan
 
-De app haalt koersen van indices, ETF's, obligatie-ETF's, termijncontracten, ETC's en Europese aandelen bij
-Yahoo Finance. Yahoo heeft daar geen officiële API voor en de voorwaarden staan geautomatiseerd ophalen niet
-uitdrukkelijk toe. Kies:
+Koersen van indices, ETF's, obligatie-ETF's, termijncontracten, ETC's en Europese aandelen komen van Yahoo
+Finance. Yahoo heeft daar geen officiële API voor en de voorwaarden staan geautomatiseerd ophalen niet
+uitdrukkelijk toe. Er is voor die markten ook geen gratis officiële bron (FRED heeft alleen een paar Amerikaanse
+indices met een korte historie). Daarom blijft Yahoo aan, maar voorzichtig en omkeerbaar:
 
-1. **Zo laten.** Privégebruik, een paar honderd verzoeken per nacht. Risico: Yahoo blokkeert de NAS of wijzigt
-   iets; de app meldt dat dan en toont de laatste grades met hun peildatum.
-2. **Betaalde bron.** Met een EODHD-sleutel (vanaf ongeveer $20 per maand) komen de Europese aandelenkoersen
-   daarvandaan: vul `EODHD_API_KEY` in (J7). Voor indices, ETF's en termijncontracten moet ik dan nog een
-   koppeling bouwen; laat het me weten.
+- één aanvraag per twee seconden, een paar honderd per nacht, alleen dagkoersen;
+- weigert Yahoo vijf aanvragen op rij, dan pauzeert de app Yahoo zes uur en meldt dat één keer;
+- uitzetten kan met één regel (hieronder).
 
-Laat me weten wat je kiest. Bij optie 1 hoef je niets te doen.
+**Yahoo uitzetten**, alleen als je dat wilt 🗄️:
 
-### H4. Ontbrekende gratis databronnen
+```bash
+cd /volume1/docker/graadmeter && sed -i '/^  yahoo:$/a\    enabled: false' config/providers.yaml && sed -i '/^  yahoo_fund:$/a\    enabled: false' config/providers.yaml && grep -A1 -E '^  yahoo(_fund)?:$' config/providers.yaml && docker compose restart server
+```
 
-Een aantal maatstaven blijft leeg omdat er geen gratis, toegestane bron voor is. De grades rekenen daar eerlijk
-mee: de datadekking is lager en een pijler zonder data telt niet mee.
+Je ziet onder `yahoo:` en `yahoo_fund:` de regel `enabled: false`. Gevolg: indices, ETF's, obligaties en
+grondstoffen krijgen geen nieuwe koersen meer en hun grades verouderen; Amerikaanse aandelen lopen via Tiingo
+door, Europese aandelen alleen met een EODHD-sleutel (betaald). Weer aanzetten: verwijder die twee regels
+(`vi config/providers.yaml`, zie J7) en herstart de server. Doe dit ook op de Mac, anders zet een update hem
+weer aan.
+
+### H4. Databronnen: wat nu gekoppeld is en wat leeg blijft
+
+Na de bouw zijn vier gratis bronnen gekoppeld. Ze werken vanzelf in de nachtelijke runs:
+
+| Bron | Wat het oplevert | Wanneer |
+| --- | --- | --- |
+| **US Treasury** (rentecurve) | Obligaties: *plek op de rentecurve* (eurofondsen met de ECB-curve) | Markten-run, elke werkdag |
+| **Shiller** (CAPE) | S&P 500: pijler *Waardering* (CAPE en winstrendement min reële rente) | Markten-run, wekelijks |
+| **SEC Form 4** | Aandelen VS: *aankopen bestuurders* | Aandelen-run; de eerste keer de kwartaalbestanden vanaf 2009 (een paar minuten) en tot 3.000 losse formulieren, de rest de nacht erna |
+| **Marketaux** (nieuws) | Nieuwskoppen bij de kwartaalanalyse van grote missers | Alleen met `MARKETAUX_API_KEY` (gratis: <https://www.marketaux.com/register>), zie J7 |
+
+Dit blijft leeg omdat er geen gratis, toegestane bron voor is. De grades rekenen daar eerlijk mee: de
+datadekking is lager en een pijler zonder data telt niet mee.
 
 | Leeg | Gevolg | Wat kan |
 | --- | --- | --- |
 | Vastgoedfondsen (REIT): bezetting, AFFO, LTV | Geen grade voor REITs | Alleen met een betaalde bron |
 | Banken: CET1 en probleemleningen | Pijler kapitaal leeg, gate CET1 "onbekend" | Alleen met een betaalde bron |
-| Indices: winstrendement en CAPE | Pijler waardering leeg | Ik kan de gratis CAPE-reeks van Shiller koppelen (alleen S&P 500) |
-| Obligaties: plek op de rentecurve | Eén maatstaf leeg | Ik kan dit uit de Amerikaanse rentecurve (FRED/US Treasury) berekenen |
-| Aandelen: aankopen door insiders | Eén maatstaf leeg | Ik kan de SEC-formulieren 4 koppelen (gratis) |
-| Analistenverwachtingen (revisies) | Pijler revisies leeg | Alleen met een betaalde bron |
+| Andere indices dan de S&P 500: CAPE | Pijler waardering leeg | Geen gratis bron |
+| Analistenverwachtingen (revisies) | Deel van pijler revisies leeg | Alleen met een betaalde bron |
 | Crypto: unlocks, hacks | Gates "onbekend" | Zelf invullen, zie hieronder |
-| Nieuws bij de analyse van missers | Analyse zonder nieuws | Marketaux (gratis sleutel, 100 per dag); ik kan het koppelen |
 
 **Zelf invullen** (voor wat geen bron heeft) 🗄️, bijvoorbeeld het aandeel tokens dat binnen 90 dagen vrijkomt
 (4%) of een onopgeloste hack:

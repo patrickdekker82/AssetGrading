@@ -36,10 +36,24 @@ sources:
     used_for: Liquiditeit en veiligheidscontrole van memecoins
   - name: SEC EDGAR
     url: https://www.sec.gov/search-filings/edgar-application-programming-interfaces
-    used_for: Jaar- en kwartaalcijfers van Amerikaanse aandelen
+    used_for: Jaar- en kwartaalcijfers van Amerikaanse aandelen; transacties van bestuurders (Form 4, ook de
+      kwartaalbestanden "Insider Transactions Data Sets")
+  - name: U.S. Department of the Treasury
+    url: https://home.treasury.gov/resource-center/data-chart-center/interest-rates
+    used_for: Dagelijkse Amerikaanse rentecurve (3 maanden tot 30 jaar), voor de plek op de rentecurve van
+      obligatie-ETF's
+  - name: Robert J. Shiller
+    url: https://shillerdata.com/
+    attribution: CAPE-data van Robert J. Shiller
+    used_for: CAPE en excess CAPE yield van de S&P 500 (pijler Waardering van die index)
+    note: Shiller geeft de data zonder garantie op juistheid of volledigheid.
+  - name: Marketaux
+    url: https://www.marketaux.com/
+    used_for: Nieuwskoppen bij de kwartaalanalyse van grote missers (alleen met eigen gratis sleutel)
   - name: Yahoo Finance
     url: https://finance.yahoo.com/
-    used_for: Koersen van aandelen, ETF's, indices en futures (onofficieel, alleen dagkoersen)
+    used_for: "Koersen van aandelen, ETF's, indices en futures (onofficieel, alleen dagkoersen). Uit te zetten
+      met enabled: false in config/providers.yaml."
   - name: Tiingo en EODHD
     url: https://www.tiingo.com/
     used_for: Reservebron voor aandelenkoersen (alleen met eigen API-sleutel)

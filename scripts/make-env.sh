@@ -37,6 +37,7 @@ ask COINGECKO_API_KEY "CoinGecko Demo-sleutel (begint met CG-)"
 ask FRED_API_KEY "FRED-sleutel (32 tekens)"
 ask TIINGO_API_KEY "Tiingo-sleutel (optioneel)"
 ask EIA_API_KEY "EIA-sleutel (optioneel)"
+ask MARKETAUX_API_KEY "Marketaux-sleutel voor nieuws bij missers (optioneel)"
 read -r -p "Je naam en e-mailadres voor de SEC, bijv. 'Jan Jansen jan@voorbeeld.nl': " sec
 if [ -n "$sec" ]; then set_value SEC_USER_AGENT "Graadmeter prive $sec"; fi
 ask ANTHROPIC_API_KEY "Anthropic-sleutel voor toelichtingen (optioneel, begint met sk-ant-)" secret

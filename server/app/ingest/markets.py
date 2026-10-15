@@ -9,16 +9,16 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
-from app.ingest.fx_macro import update_fx, update_macro
+from app.ingest.fx_macro import update_fx, update_macro, update_treasury
 from app.ingest.report import Report
 from app.ingest.stocks import _set_alias, _upsert_asset, aliases, update_adjusted_series
-from app.ingest.store import insert_facts
+from app.ingest.store import insert_facts, insert_macro
 from app.markets_config import FundRow, MarketsConfig
 from app.models import Asset, FundamentalFact
-from app.providers import Fact, ProviderError
+from app.providers import Fact, ProviderError, ProviderUnavailable
 from app.providers.config import ProvidersConfig
 from app.providers.registry import Providers
 
@@ -60,7 +60,9 @@ def run_markets(sf: sessionmaker[Session], providers: Providers, cfg: ProvidersC
     ctx = MarketsContext(sf, providers, cfg, markets, today or datetime.now(UTC).date(), Report())
     update_fx(sf, providers, cfg, ctx.report, ctx.today)
     update_macro(sf, providers, cfg, ctx.report)
+    update_treasury(sf, providers, cfg, ctx.report, ctx.today)
     sync_indices(ctx)
+    update_shiller(ctx)
     sync_funds(ctx, markets.etfs, "etf")
     sync_funds(ctx, markets.bonds, "bond")
     sync_references(ctx)
@@ -79,9 +81,37 @@ def sync_indices(ctx: MarketsContext) -> None:
             asset.sector, asset.tracked = i.region, True
             asset.tracked_since = asset.tracked_since or ctx.today
             asset.categories = [f"currency:{i.currency}"] + ([f"curve:{i.curve}"] if i.curve else []) + \
-                ([f"breadth:{i.breadth}"] if i.breadth else []) + (["world"] if i.world else [])
+                ([f"breadth:{i.breadth}"] if i.breadth else []) + (["world"] if i.world else []) + \
+                ([f"valuation:{i.valuation}"] if i.valuation else [])
             _set_alias(session, asset.id, "yahoo_symbol", i.yahoo, "config")
             session.commit()
+
+
+SHILLER_EVERY_DAYS = 7          # the spreadsheet changes about once a month
+SHILLER_RELEASE_LAG = timedelta(days=31)   # a month's CAPE counts as known a month after the month ends
+
+
+def update_shiller(ctx: MarketsContext) -> None:
+    """Shiller's CAPE and excess CAPE yield for the S&P 500 (only for indices with `valuation: shiller`)."""
+    if "shiller" not in ctx.cfg.providers or not any(i.valuation == "shiller" for i in ctx.markets.indices):
+        return
+    with ctx.sf() as session:
+        recent = session.execute(text(
+            "SELECT 1 FROM provider_call_log WHERE provider = 'shiller' AND ok AND started_at > :t LIMIT 1"),
+            {"t": datetime.now(UTC) - timedelta(days=SHILLER_EVERY_DAYS)}).first()
+    if recent:
+        return
+    try:
+        rows, call_id = ctx.providers.get("shiller").monthly()
+    except ProviderError as exc:
+        ctx.report.error(f"shiller: {exc}")
+        return
+    now = datetime.now(UTC)
+    with ctx.sf() as session:
+        for sid, idx in (("SHILLER_CAPE", 1), ("SHILLER_ECY", 2)):
+            obs = [(r[0], r[idx], call_id) for r in rows if r[idx] is not None]
+            ctx.report.add("macro_added", insert_macro(session, sid, "shiller", obs, now, SHILLER_RELEASE_LAG))
+        session.commit()
 
 
 def sync_references(ctx: MarketsContext) -> None:
@@ -152,6 +182,9 @@ def update_prices(ctx: MarketsContext) -> None:
         try:
             update_adjusted_series(ctx.sf, yahoo, asset_id, "yahoo", symbol, PRICE_START, ctx.today, RECHECK_DAYS,
                                    ctx.report, store_raw=False, default_currency=currencies.get(slug))
+        except ProviderUnavailable as exc:
+            ctx.report.unavailable(exc, "koersen van indices, ETF's en obligatie-ETF's")
+            break
         except ProviderError as exc:
             ctx.report.error(f"koersen {slug}: {exc}")
 
@@ -169,6 +202,9 @@ def update_holdings(ctx: MarketsContext) -> None:
     for asset_id, slug, symbol in work:
         try:
             h = provider.top_holdings(symbol)
+        except ProviderUnavailable as exc:
+            ctx.report.unavailable(exc, "posities van ETF's")
+            break
         except ProviderError as exc:
             ctx.report.add("holdings_errors")
             if exc.status_code == 429 or "crumb" in str(exc):

@@ -21,7 +21,7 @@ from app.ingest.report import Report
 from app.ingest.stocks import _set_alias, _upsert_asset, aliases, update_adjusted_series
 from app.ingest.store import insert_facts, insert_macro, upsert_bars
 from app.models import Asset, MacroObservation
-from app.providers import Bar, Fact, ProviderError
+from app.providers import Bar, Fact, ProviderError, ProviderUnavailable
 from app.providers.config import ProvidersConfig
 from app.providers.registry import Providers
 
@@ -235,6 +235,9 @@ def update_prices(ctx: CommodityContext) -> None:
         try:
             update_adjusted_series(ctx.sf, yahoo, asset_id, "yahoo", symbol, ctx.start, ctx.today, 10, ctx.report,
                                    store_raw=False, default_currency="USD")
+        except ProviderUnavailable as exc:
+            ctx.report.unavailable(exc, "koersen van grondstoffen en ETC's")
+            break
         except ProviderError as exc:
             ctx.report.error(f"koersen {slug}: {exc}")
 
@@ -263,6 +266,9 @@ def update_curves(ctx: CommodityContext) -> None:
                 break
             try:
                 s = yahoo.series(symbol, ctx.today - timedelta(days=10), ctx.today, default_currency="USD")
+            except ProviderUnavailable as exc:
+                ctx.report.unavailable(exc, "termijncurves")
+                return
             except ProviderError:
                 continue
             if s.bars and (ctx.today - s.bars[-1].ts).days <= 5:

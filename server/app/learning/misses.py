@@ -6,10 +6,13 @@ decile of that metric over the whole backtest and counts, per threshold, the mis
 the false alarms (A and B grades it would have capped that did not miss). The result is a proposal for the
 owner; turning it into a gate is a model change (new version) like any other.
 Only live misses are analysed: a model knows how old events ended, so it is not shown backtest history.
+With a Marketaux key the analysis also gets the news headlines about the company from the months after the
+grade ("plus later nieuws", chapter 9).
 """
 
 import json
-from datetime import UTC, datetime
+from collections.abc import Callable
+from datetime import UTC, date, datetime
 
 import numpy as np
 import pandas as pd
@@ -26,7 +29,9 @@ from app.modelconfig import ModelConfig
 SYSTEM = """\
 Je analyseert een misser van Graadmeter, een privé-app die beleggingsassets rangschikt: een asset kreeg een A \
 of B en bleef daarna ruim achter bij de benchmark. Je krijgt de grade zoals die toen was, met alle maatstaven en \
-pijlers, en de uitkomst. Er is geen nieuwsbron gekoppeld; zeg het als de verklaring vooral in nieuws zou liggen.
+pijlers, en de uitkomst. Bij "nieuws" staan, als de app ze heeft, koppen en samenvattingen van artikelen over \
+de asset uit de periode na de grade (bron Marketaux). Gebruik alleen wat daar staat. Is "nieuws" leeg of null, \
+zeg dan of de verklaring vooral in nieuws zou kunnen liggen; met nieuws: of de misser vooral door dat nieuws komt.
 
 Leg in gewone taal uit wat het model gemist kan hebben. Noem hoogstens één bestaande maatstaf uit "maatstaven" \
 die een harde regel had kunnen zijn, met de richting: "laag" als een lage waarde het risico was, "hoog" als een \
@@ -66,7 +71,7 @@ def live_misses(session: Session, model_version_id: int, horizon: int, below: fl
     return [dict(r) for r in rows]
 
 
-def miss_input(m: dict, horizon: int) -> dict:
+def miss_input(m: dict, horizon: int, news: list[dict] | None = None) -> dict:
     metrics = []
     for p in m["result"].get("pillars", []):
         for x in p.get("metrics", []):
@@ -77,7 +82,8 @@ def miss_input(m: dict, horizon: int) -> dict:
                     "harde_regels": m["result"].get("gates", []), "maatstaven": metrics,
                     "uitkomst": {"horizon_maanden": horizon, "rendement": m["total_return"],
                                  "boven_benchmark": m["excess_return"], "benchmark": m["benchmark"],
-                                 "grootste_daling": m["max_drawdown"]}})
+                                 "grootste_daling": m["max_drawdown"]},
+                    "nieuws": news})
 
 
 def evaluate_gate(session: Session, run_id: int, model_version_id: int, template_id: str, metric: str,
@@ -109,7 +115,9 @@ def evaluate_gate(session: Session, run_id: int, model_version_id: int, template
 
 
 def analyse_misses(session: Session, ai: AiConfig, client, settings: EvaluationSettings, champion: ModelConfig,
-                   champion_id: int, report: Report, now: datetime | None = None) -> list[int]:
+                   champion_id: int, report: Report, now: datetime | None = None,
+                   news: Callable[[int, date, int], list[dict] | None] | None = None) -> list[int]:
+    """`news`: (asset id, grade date, horizon) -> articles after the grade, or None (no key, not a company)."""
     now = now or datetime.now(UTC)
     cfg = settings.raw["learning"]["miss_analysis"]
     h, below = int(cfg["horizon_months"]), float(cfg["excess_below"])
@@ -120,7 +128,7 @@ def analyse_misses(session: Session, ai: AiConfig, client, settings: EvaluationS
     run = latest_run(session, champion_id)
     ids = []
     for m in misses:
-        payload = miss_input(m, h)
+        payload = miss_input(m, h, news(m["asset_id"], m["as_of"], h) if news else None)
         res = call(session, ai, client, "miss_analysis", SYSTEM, payload, SCHEMA, now, asset_id=m["asset_id"],
                    model_version_id=champion_id, snapshot_as_of=m["as_of"])
         if res.data is None:
