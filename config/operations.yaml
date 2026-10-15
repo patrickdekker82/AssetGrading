@@ -1,0 +1,28 @@
+# Operations (phase 10): back-up, restore test, notifications and the watchdog.
+# Schedules are in providers.yaml (section `schedule`). Secrets (SMTP password, webhook URL) only in .env.
+
+backup:
+  dir: /backups                    # mounted from ./backups next to docker-compose.yml (outside the containers)
+  keep_daily: 14                   # the last 14 dumps
+  keep_monthly: 12                 # plus the first dump of each of the last 12 months
+
+restore_test:
+  database: graadmeter_restoretest # temporary database, dropped afterwards
+
+notify:
+  on_failed: true
+  partial_min_errors: 5            # a run that finished with at least this many errors is reported too
+  subject_prefix: "[Graadmeter]"
+
+# A scheduled job whose last run started longer ago than this (hours) is reported by the watchdog.
+watchdog:
+  crypto: 26
+  fx_macro: 98                     # weekdays only: covers a weekend
+  markets: 98
+  commodities: 98
+  stocks: 98
+  explanations: 26
+  prune_raw: 26
+  backup: 26
+  restore_test: 194                # weekly
+  evaluation: 768                  # monthly (32 days)

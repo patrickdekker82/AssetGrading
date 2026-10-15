@@ -212,3 +212,6 @@ schedule:                            # UTC
   evaluation: "0 6 2 * *"           # monthly measurement, once the month's last prices are in
   quarterly: "0 7 3 1,4,7,10 *"      # quarterly round: proposals only, nothing changes without the owner
   challenger_backtests: "0 1 * * sun"  # weekly; does nothing when every model version has a backtest
+  backup: "0 2 * * *"                # pg_dump to ./backups, after the crypto run
+  restore_test: "0 5 * * sun"        # restore the latest dump into an empty database and recompute every grade
+  watchdog: "17 * * * *"             # hourly: report a nightly job that did not run

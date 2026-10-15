@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { ActionButton } from "@/components/ActionButton";
 import { RunJobButton } from "@/components/RunJobButton";
 import { fetchServer } from "@/lib/server";
 import {
@@ -32,8 +33,19 @@ type JobRun = {
   status: string;
   started_at: string;
   finished_at: string | null;
-  summary: { counts?: Record<string, number>; error_count?: number; errors?: string[] } | null;
+  summary: { counts?: Record<string, number>; error_count?: number; errors?: string[];
+    resources?: { seconds: number; cpu_seconds: number; peak_rss_mb: number | null } | null } | null;
   error: string | null;
+};
+
+type Ops = {
+  backup_dir: string | null;
+  backups: { name: string; bytes: number; modified: string }[];
+  last_backup: { status: string; finished_at: string | null; notes: string[] | null; error: string | null } | null;
+  last_restore_test: { status: string; finished_at: string | null; notes: string[] | null; errors: string[] | null;
+    error: string | null } | null;
+  channels: string[];
+  notifications: { created_at: string; kind: string; channel: string; subject: string; ok: boolean; error: string | null }[];
 };
 
 type AiUsage = {
@@ -61,11 +73,12 @@ type Coverage = {
 const TRIGGER_LABELS: Record<string, string> = { schedule: "planning", manual: "handmatig", cli: "opdrachtregel" };
 
 export default async function UsagePage() {
-  const [usage, jobs, coverage, ai] = await Promise.all([
+  const [usage, jobs, coverage, ai, ops] = await Promise.all([
     fetchServer<{ month: string; providers: ProviderUsage[] }>("/api/usage"),
     fetchServer<Jobs>("/api/jobs"),
     fetchServer<Coverage>("/api/data/coverage"),
     fetchServer<AiUsage>("/api/ai/usage"),
+    fetchServer<Ops>("/api/ops"),
   ]);
   if (!usage || !jobs || !coverage) {
     return <p className="notice">De rekenserver is niet bereikbaar. Controleer of alle containers draaien.</p>;
@@ -83,6 +96,7 @@ export default async function UsagePage() {
         </p>
       </div>
 
+      {ops && <OpsCard ops={ops} />}
       {ai && <AiCard ai={ai} />}
 
       <div className="card">
@@ -154,12 +168,13 @@ export default async function UsagePage() {
                 <th scope="col">Taak</th>
                 <th scope="col">Status</th>
                 <th scope="col" className="num">Duur</th>
+                <th scope="col" className="num">Geheugen</th>
                 <th scope="col">Toegevoegd</th>
               </tr>
             </thead>
             <tbody>
               {jobs.runs.length === 0 && (
-                <tr><td colSpan={5} className="muted">Nog geen runs.</td></tr>
+                <tr><td colSpan={6} className="muted">Nog geen runs.</td></tr>
               )}
               {jobs.runs.map((r) => (
                 <tr key={r.id}>
@@ -170,6 +185,9 @@ export default async function UsagePage() {
                     {r.summary?.error_count ? <span className="muted"> · {r.summary.error_count} meldingen</span> : null}
                   </td>
                   <td className="num">{formatDuration(r.started_at, r.finished_at)}</td>
+                  <td className="num muted" title={r.summary?.resources ? `rekentijd ${r.summary.resources.cpu_seconds} s` : undefined}>
+                    {r.summary?.resources?.peak_rss_mb ? `${formatNumber(Math.round(r.summary.resources.peak_rss_mb))} MB` : "–"}
+                  </td>
                   <td className="muted">{summarise(r.summary?.counts)}</td>
                 </tr>
               ))}
@@ -220,6 +238,58 @@ export default async function UsagePage() {
         )}
       </div>
     </section>
+  );
+}
+
+function OpsCard({ ops }: { ops: Ops }) {
+  const b = ops.last_backup;
+  const r = ops.last_restore_test;
+  return (
+    <div className="card">
+      <h2 className="card-title">Beheer</h2>
+      <div className="stats">
+        <Stat label="Laatste back-up" value={b ? (STATUS_LABELS[b.status] ?? b.status) : "nog geen"}
+          hint={b?.finished_at ? `${formatDateTime(b.finished_at)}${b.error ? ` · ${b.error}` : ""}` : "elke nacht om 02:00 UTC"} />
+        <Stat label="Laatste hersteltest" value={r ? (STATUS_LABELS[r.status] ?? r.status) : "nog geen"}
+          hint={r ? (r.notes?.[0] ?? r.errors?.[0] ?? r.error ?? "") : "elke zondag; zet de back-up terug en rekent alle grades na"} />
+        <Stat label="Meldingen" value={ops.channels.length ? ops.channels.join(" en ") : "niet ingesteld"}
+          hint={ops.channels.length ? "bij een mislukte of overgeslagen nachtrun" : "zet NOTIFY_WEBHOOK_URL of SMTP in .env"} />
+      </div>
+      {ops.channels.length > 0 && (
+        <div className="proposal">
+          <ActionButton url="/api/ops/notify-test" label="Testmelding sturen" confirm="Een testmelding sturen?" />
+        </div>
+      )}
+      {ops.backups.length > 0 && (
+        <div className="table-wrap">
+          <table className="ranking">
+            <thead><tr><th scope="col">Back-up in {ops.backup_dir}</th><th scope="col" className="num">Grootte</th><th scope="col">Gemaakt</th></tr></thead>
+            <tbody>
+              {ops.backups.map((f) => (
+                <tr key={f.name}>
+                  <td>{f.name}</td>
+                  <td className="num">{formatNumber(Math.round(f.bytes / 1e6))} MB</td>
+                  <td>{formatDateTime(f.modified)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {ops.notifications.length > 0 && (
+        <details className="details">
+          <summary>Laatste meldingen</summary>
+          <ul className="source-list">
+            {ops.notifications.map((n, i) => (
+              <li key={i}>
+                {formatDateTime(n.created_at)} · {n.subject} · {n.channel}{" "}
+                {n.ok ? <span className="good-text">verzonden</span> : <span className="warn-text">{n.error ?? "niet verzonden"}</span>}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </div>
   );
 }
 

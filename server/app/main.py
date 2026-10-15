@@ -21,6 +21,7 @@ from app.jobs import JobContext, fail_orphaned_runs, schedule_jobs
 from app.learning.registry import load_active
 from app.markets_config import load_markets_config
 from app.modelconfig import load_model_config
+from app.ops.config import load_ops_config
 from app.providers.config import load_providers_config
 from app.providers.recorder import DbRecorder
 from app.providers.registry import Providers
@@ -65,7 +66,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                                 stocks=stocks, markets=markets,
                                 commodities=load_commodities_config(settings.config_dir),
                                 ai=ai, labels=labels, llm_client=make_client(ai),
-                                evaluation=EvaluationSettings.load(settings.config_dir / "evaluation.yaml"))
+                                evaluation=EvaluationSettings.load(settings.config_dir / "evaluation.yaml"),
+                                ops=load_ops_config(settings.config_dir / "operations.yaml"))
 
     app.state.scheduler = None
     if settings.scheduler_enabled:

@@ -23,6 +23,10 @@
     python -m app.cli evaluate            monthly measurement on live grades now
     python -m app.cli proposals           list model proposals
     python -m app.cli apply-proposal <id> write an approved proposal into a new model version
+    python -m app.cli nightly             run every nightly job one after the other and report time and memory
+    python -m app.cli backup              dump the database to the back-up folder now
+    python -m app.cli restore-test        restore the newest back-up into an empty database and recompute
+    python -m app.cli notify-test         send a test notification to the configured channels
 """
 
 import sys
@@ -71,6 +75,14 @@ def main(argv: list[str]) -> int:
             return _proposals()
         elif command == "apply-proposal":
             return _apply_proposal(int(argv[1]))
+        elif command == "nightly":
+            return _nightly()
+        elif command == "backup":
+            return _run_job("backup")
+        elif command == "restore-test":
+            return _run_job("restore_test")
+        elif command == "notify-test":
+            return _notify_test()
         else:
             print(f"unknown command: {command}", file=sys.stderr)
             return 2
@@ -116,6 +128,7 @@ def _run_job(name: str) -> int:
     stocks = load_stocks_config(settings.config_dir / "stocks.yaml")
     from app.ai import load_ai_config, make_client
     from app.evaluation.outcomes import EvaluationSettings
+    from app.ops.config import load_ops_config
 
     ai = load_ai_config(settings.config_dir / "ai.yaml")
     labels = {k: v.label for k, v in load_glossary(settings.config_dir / "glossary.nl.yaml").metrics.items()}
@@ -123,7 +136,8 @@ def _run_job(name: str) -> int:
                      markets=load_markets_config(settings.config_dir),
                      commodities=load_commodities_config(settings.config_dir),
                      ai=ai, labels=labels, llm_client=make_client(ai),
-                     evaluation=EvaluationSettings.load(settings.config_dir / "evaluation.yaml"))
+                     evaluation=EvaluationSettings.load(settings.config_dir / "evaluation.yaml"),
+                     ops=load_ops_config(settings.config_dir / "operations.yaml"))
     run = run_job(ctx, name, trigger="cli")
     print(json.dumps({"status": run.status, "summary": run.summary, "error": run.error}, indent=2, default=str))
     return 0 if run.status in ("ok", "partial", "skipped") else 1
@@ -338,6 +352,44 @@ def _apply_proposal(proposal_id: int) -> int:
         return 1
     print(f"Modelversie {version} vastgelegd. Herstart de server om hem te gebruiken.")
     return 0
+
+
+NIGHTLY = ["fx_macro", "markets", "commodities", "stocks", "crypto", "explanations", "prune_raw", "backup"]
+
+
+def _nightly() -> int:
+    """Every job of one night, in the order of the schedule, with wall time, CPU time and peak memory."""
+    import json
+    import time
+
+    from app.jobs import JOBS
+
+    started = time.monotonic()
+    rows, worst = [], 0
+    for name in [n for n in NIGHTLY if n in JOBS]:
+        t0 = time.monotonic()
+        code = _run_job(name)
+        worst = max(worst, code)
+        rows.append((name, round(time.monotonic() - t0)))
+    total = round(time.monotonic() - started)
+    print(json.dumps({"jobs_seconds": dict(rows), "total_seconds": total,
+                      "total_minutes": round(total / 60, 1)}, indent=2))
+    return worst
+
+
+def _notify_test() -> int:
+    from app.ops.config import load_ops_config
+    from app.ops.notify import channels, send
+
+    settings, sf, _, _ = _context()
+    ops = load_ops_config(settings.config_dir / "operations.yaml")
+    if not channels(ops):
+        print("Geen meldkanaal ingesteld: zet NOTIFY_WEBHOOK_URL of SMTP_HOST en NOTIFY_EMAIL_TO in .env.")
+        return 1
+    with sf() as session:
+        n = send(session, ops, "Testmelding", "Dit is een testmelding van Graadmeter. Meldingen werken.", "test")
+    print(f"Verzonden via {n} van {len(channels(ops))} kanalen.")
+    return 0 if n else 1
 
 
 if __name__ == "__main__":

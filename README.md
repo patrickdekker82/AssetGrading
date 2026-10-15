@@ -16,16 +16,18 @@ De app bestaat uit drie Docker-containers:
 
 De interface praat alleen met de eigen rekenserver, nooit rechtstreeks met een dataleverancier.
 
+**Voor gebruik en beheer: zie de [handleiding](docs/handleiding.md).** Deze README is de technische kant.
+
 ## Starten op de Mac
 
 Nodig: [Docker Desktop](https://www.docker.com/products/docker-desktop/).
 
 ```bash
-cp .env.example .env          # vul daarna minstens POSTGRES_PASSWORD in
+cp .env.example .env          # vul daarna minstens POSTGRES_PASSWORD en APP_PASSWORD in
 docker compose up --build
 ```
 
-Open daarna <http://localhost:3000>. Rechtsboven staat of het systeem in orde is.
+Open daarna <http://localhost:3000> en log in met `APP_PASSWORD`. Rechtsboven staat of het systeem in orde is.
 Stoppen: `Ctrl+C`, of `docker compose down` (de data blijft bewaard).
 
 ## Op de Synology (DS920+)
@@ -43,6 +45,8 @@ Op de NAS (via SSH, in een map zoals `/volume1/docker/graadmeter`):
 2. Laad de images: `docker load -i graadmeter-images.tar.gz`
 3. Controleer of de images op deze NAS werken: `scripts/nas-smoketest.sh` (alle regels moeten `OK` zijn).
 4. Start: `docker compose -f docker-compose.yml -f docker-compose.nas.yml up -d`
+5. Meet geheugen en rekentijd met een volledige nachtrun: `scripts/nas-check.sh` (moet binnen een uur klaar
+   zijn; toont het hoogste geheugengebruik per container).
 
 De databasebestanden staan dan in `data/postgres` naast de compose-bestanden.
 
@@ -103,7 +107,7 @@ De rekenserver haalt elke nacht zelf data op (tijden in UTC, instelbaar in `conf
 | Wisselkoersen en macro | werkdagen 16:30 | ECB-referentiekoersen (Frankfurter) en rentes, VIX en dollarindex (FRED) |
 | Opruimen | 03:30 | Ruwe antwoorden ouder dan de bewaartermijn per bron |
 
-De pagina **Verbruik** (rechtsboven) toont per bron het aantal aanroepen, het maandbudget, fouten,
+De pagina **Instellingen** (rechtsboven) toont per bron het aantal aanroepen, het maandbudget, fouten,
 de laatste runs en hoeveel data er is. Daar kun je een taak ook direct starten. Via de opdrachtregel:
 `docker compose exec server python -m app.cli run crypto`.
 
@@ -223,13 +227,38 @@ Er is geen gratis bron met betrouwbare fondskenmerken. Werk daarom `config/etfs.
 en datum in. Een nieuwe waarde telt mee vanaf het moment dat de nachtrun hem inleest. Obligatiecijfers
 (rendement, duration, ratings) ouder dan 200 dagen tellen niet meer mee.
 
-## Back-up
+## Inloggen
 
-```bash
-scripts/backup.sh             # schrijft backups/graadmeter-<datum>.sql.gz, bewaart de laatste 14
-```
+De interface vraagt één wachtwoord: `APP_PASSWORD` in `.env` (verplicht; zonder start de interface niet).
+De sessie is een ondertekend cookie van 30 dagen; een ander wachtwoord logt iedereen uit. Na tien foute
+pogingen in een kwartier volgt een pauze. De rekenserver zelf is alleen binnen Docker bereikbaar. Bedoeld
+voor het thuisnetwerk: zet poort 3000 niet open naar het internet.
 
-Vanaf fase 10 draait dit elke nacht automatisch, met een geteste herstelprocedure.
+## Back-up en herstel
+
+- **Elke nacht om 02:00 UTC** maakt de server `backups/graadmeter-<tijd>.dump` (PostgreSQL custom format)
+  met een `.sha256` ernaast, gecontroleerd door de inhoudsopgave terug te lezen. Bewaard: de laatste 14 en
+  de eerste van elk van de laatste 12 maanden (`config/operations.yaml`).
+- **Elke zondag** zet de server de nieuwste back-up terug in een lege, tijdelijke database, rekent daar
+  elke grade opnieuw uit uit zijn opgeslagen invoer en modelversie, en vergelijkt de grades met de live
+  database. De uitkomst staat onder Instellingen > Beheer.
+- **Met de hand**: `scripts/backup.sh` (back-up), `docker compose exec server python -m app.cli restore-test`.
+- **Herstellen, ook op een schone machine**: `scripts/restore.sh backups/graadmeter-<tijd>.dump` (op de NAS
+  met `COMPOSE_FILES="-f docker-compose.yml -f docker-compose.nas.yml"`). Het script controleert het
+  bestand, zet de database terug, start de app en rekent alle grades opnieuw uit.
+- Kopieer `backups/` ook naar een andere plek (Hyper Backup naar een externe schijf of de cloud).
+
+## Meldingen en bewaking
+
+Mislukt een geplande taak, of eindigt hij met minstens 5 fouten, dan stuurt de server een melding. Elk uur
+controleert hij ook of geen taak is blijven liggen (grenzen in `config/operations.yaml`). Kanalen in
+`.env`: `NOTIFY_WEBHOOK_URL` (bijvoorbeeld een ntfy-onderwerp of Synology Chat) en/of SMTP
+(`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `NOTIFY_EMAIL_FROM`, `NOTIFY_EMAIL_TO`). Testen:
+Instellingen > Beheer > Testmelding sturen, of `python -m app.cli notify-test`. Sleutels in URL's worden
+uit meldingen weggelaten.
+
+Elke run legt duur, rekentijd en het hoogste geheugengebruik vast (Instellingen > Laatste runs).
+`python -m app.cli nightly` draait alle nachtelijke taken achter elkaar en meldt de totale tijd.
 
 ## Tests
 
@@ -256,8 +285,8 @@ De app wordt in elf fases gebouwd (zie `CHANGELOG.md`). Na elke fase volgt een a
 | 6 | Grondstoffen en valuta | Klaar |
 | 7 | Toelichting, volglijst en bronnen | Klaar |
 | 8 | Uitkomsten, terugtest en pagina Model | Klaar |
-| 9 | Leerlus | Klaar, wacht op akkoord |
-| 10 | Afronding | |
+| 9 | Leerlus | Klaar |
+| 10 | Afronding | Klaar, wacht op akkoord |
 
 ## Wat deze app niet doet
 

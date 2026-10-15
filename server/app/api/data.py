@@ -194,3 +194,54 @@ def sources(request: Request) -> list[dict]:
 
     path = get_settings().config_dir / "sources.yaml"
     return yaml.safe_load(path.read_text(encoding="utf-8"))["sources"]
+
+
+@router.get("/ops")
+def ops_status(request: Request) -> dict:
+    """Back-ups, the last restore test and notifications (phase 10), for the settings page."""
+    from app.ops.backup import dumps
+    from app.ops.notify import channels
+
+    jobs = request.app.state.jobs
+    ops = jobs.ops
+    files = []
+    if ops is not None and ops.backup_dir.exists():
+        for p in reversed(dumps(ops.backup_dir)[-5:]):
+            st = p.stat()
+            files.append({"name": p.name, "bytes": st.st_size,
+                          "modified": datetime.fromtimestamp(st.st_mtime, UTC)})
+    with jobs.sf() as session:
+        last = {r["job"]: dict(r) for r in session.execute(text(
+            """SELECT DISTINCT ON (job) job, status, started_at, finished_at, summary->'notes' AS notes,
+                      summary->'errors' AS errors, error
+               FROM job_run WHERE job IN ('backup', 'restore_test') ORDER BY job, started_at DESC""")).mappings()}
+        notes = [dict(r) for r in session.execute(text(
+            "SELECT created_at, kind, channel, subject, ok, error FROM notification ORDER BY id DESC LIMIT 10"))
+                 .mappings()]
+        resources = [dict(r) for r in session.execute(text(
+            """SELECT DISTINCT ON (job) job, started_at, summary->'resources' AS resources FROM job_run
+               WHERE summary ? 'resources' ORDER BY job, started_at DESC""")).mappings()]
+    for r in last.values():
+        if r.get("error"):
+            r["error"] = r["error"].strip().splitlines()[-1][:300]
+    return {
+        "backup_dir": str(ops.backup_dir) if ops else None,
+        "backups": files,
+        "last_backup": last.get("backup"),
+        "last_restore_test": last.get("restore_test"),
+        "channels": channels(ops) if ops else [],
+        "notifications": notes,
+        "resources": resources,
+    }
+
+
+@router.post("/ops/notify-test", status_code=202)
+def notify_test(request: Request) -> dict:
+    from app.ops.notify import channels, send
+
+    jobs = request.app.state.jobs
+    if jobs.ops is None or not channels(jobs.ops):
+        raise HTTPException(409, "Geen meldkanaal ingesteld (NOTIFY_WEBHOOK_URL of SMTP in .env).")
+    with jobs.sf() as session:
+        n = send(session, jobs.ops, "Testmelding", "Dit is een testmelding van Graadmeter. Meldingen werken.", "test")
+    return {"delivered": n}

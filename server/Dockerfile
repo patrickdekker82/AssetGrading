@@ -9,6 +9,17 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     CONFIG_DIR=/config
 
+# pg_dump/pg_restore must match the database (PostgreSQL 16): take them from the PostgreSQL apt repository.
+RUN sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.list.d/debian.sources \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates curl gnupg \
+ && install -d /usr/share/postgresql-common/pgdg \
+ && curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+ && echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(. /etc/os-release && echo $VERSION_CODENAME)-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends postgresql-client-16 \
+ && apt-get purge -y curl gnupg && apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install -r requirements.txt
@@ -18,8 +29,10 @@ COPY migrations ./migrations
 COPY app ./app
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 
-RUN useradd --system --uid 10001 graadmeter && chmod +x /usr/local/bin/docker-entrypoint.sh
-USER graadmeter
+# The entrypoint starts as root only to make the mounted back-up folder writable, then drops to this user.
+RUN useradd --system --uid 10001 graadmeter && chmod +x /usr/local/bin/docker-entrypoint.sh \
+ && mkdir -p /backups && chown graadmeter /backups
+ENV BACKUP_DIR=/backups
 
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \

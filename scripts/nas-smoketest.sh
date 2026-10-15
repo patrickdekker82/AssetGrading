@@ -51,6 +51,7 @@ for name, url in urls.items():
     print(f'  {label} {name}: {code}')
 sys.exit(1 if bad else 0)
 "
+check "back-up (pg_dump 16 in de rekenserver)" docker run --rm --entrypoint pg_dump graadmeter-server:latest --version
 check "webinterface (Node)" docker run --rm --entrypoint node graadmeter-web:latest -e "console.log('node', process.version)"
 check "database (PostgreSQL)" docker run --rm --entrypoint postgres postgres:16-alpine --version
 

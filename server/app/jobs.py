@@ -54,6 +54,7 @@ class JobContext:
     labels: dict[str, str] | None = None     # metric labels from the glossary, for explanations
     llm_client: object | None = None         # None without an API key: template text only
     evaluation: object | None = None         # EvaluationSettings (config/evaluation.yaml)
+    ops: object | None = None                # OpsConfig (config/operations.yaml): back-up and notifications
 
 
 def run_crypto_and_grade(c: JobContext) -> Report:
@@ -273,6 +274,44 @@ def run_backtest(c: JobContext) -> Report:
     return report
 
 
+def run_backup(c: JobContext) -> Report:
+    """Nightly pg_dump to the back-up folder outside the containers (phase 10)."""
+    from app.ops.backup import backup
+    from app.settings import get_settings
+
+    if c.ops is None:
+        report = Report()
+        report.error("Geen beheerconfiguratie geladen.")
+        return report
+    _, report = backup(get_settings().database_url, c.ops.backup_dir, c.ops.keep_daily, c.ops.keep_monthly)
+    return report
+
+
+def run_restore_test(c: JobContext) -> Report:
+    """Weekly: restore the newest back-up into an empty database and recompute every grade (phase 10)."""
+    from app.ops.backup import restore_test
+    from app.settings import get_settings
+
+    if c.ops is None:
+        report = Report()
+        report.error("Geen beheerconfiguratie geladen.")
+        return report
+    return restore_test(get_settings().database_url, c.ops.backup_dir, c.ops.restore_database)
+
+
+def run_watchdog(ctx: JobContext) -> None:
+    """Hourly, not recorded as a run: report scheduled jobs that should have run but did not."""
+    from app.ops.watchdog import run_watchdog as check
+
+    if ctx.ops is None:
+        return
+    try:
+        with ctx.sf() as session:
+            check(session, ctx.ops, set(ctx.cfg.schedule), JOB_LABELS_NL)
+    except Exception:  # noqa: BLE001
+        log.exception("watchdog failed")
+
+
 def last_trading_day(now: datetime) -> date:
     """The last weekday whose US session has closed (21:00 UTC covers both summer and winter time)."""
     day = now.date() if now.hour >= 21 else now.date() - timedelta(days=1)
@@ -292,6 +331,8 @@ JOBS: dict[str, Callable[[JobContext], Report]] = {
     "backtest": run_backtest,
     "quarterly": run_quarterly,
     "challenger_backtests": run_challenger_backtests,
+    "backup": run_backup,
+    "restore_test": run_restore_test,
     "prune_raw": lambda c: run_prune(c.sf, c.cfg),
 }
 
@@ -306,6 +347,8 @@ JOB_LABELS_NL = {
     "backtest": "Terugtest (alle klassen, duurt uren)",
     "quarterly": "Kwartaalronde (voorstellen, beoordeling, missers)",
     "challenger_backtests": "Terugtest van uitdagers",
+    "backup": "Back-up van de database",
+    "restore_test": "Hersteltest van de back-up",
     "prune_raw": "Opruimen ruwe antwoorden",
 }
 
@@ -364,8 +407,12 @@ def _execute(ctx: JobContext, name: str, trigger: str) -> JobRun:
         run_id = run.id
     token = current_job_run.set(run_id)
     status, summary, error = "ok", None, None
+    from app.ops.resources import ResourceMeter
+
+    meter = ResourceMeter()
     try:
-        report = JOBS[name](ctx)
+        with meter:
+            report = JOBS[name](ctx)
         summary = report.as_dict()
         status = "partial" if report.errors else "ok"
     except Exception as exc:  # noqa: BLE001 - a failed run is recorded, never crashes the server
@@ -373,23 +420,43 @@ def _execute(ctx: JobContext, name: str, trigger: str) -> JobRun:
         log.exception("job %s failed", name)
     finally:
         current_job_run.reset(token)
+    summary = {**(summary or {}), "resources": getattr(meter, "result", None)}
     with ctx.sf() as session:
         run = session.get(JobRun, run_id)
         run.status, run.summary, run.error, run.finished_at = status, summary, error, datetime.now(UTC)
         session.commit()
         session.refresh(run)
         log.info("job %s finished: %s", name, status)
-        return run
+    if trigger == "schedule" and ctx.ops is not None:
+        _notify_failure(ctx, name, status, summary, error)
+    return run
+
+
+def _notify_failure(ctx: JobContext, name: str, status: str, summary: dict, error: str | None) -> None:
+    from app.ops.notify import job_message, send, should_notify
+
+    if not should_notify(ctx.ops, status, summary):
+        return
+    subject, body = job_message(name, JOB_LABELS_NL.get(name, name), status, summary, error)
+    try:
+        with ctx.sf() as session:
+            send(session, ctx.ops, subject, body, "job")
+    except Exception:  # noqa: BLE001 - a notification never breaks the run record
+        log.exception("notification for %s failed", name)
 
 
 def schedule_jobs(scheduler: BaseScheduler, ctx: JobContext) -> None:
     mapping = {"crypto": ["crypto"], "stocks": ["stocks"], "markets": ["markets"], "commodities": ["commodities"],
                "fx_macro": ["fx_macro"], "explanations": ["explanations"], "prune_raw": ["prune_raw"],
                "evaluation": ["evaluation"], "quarterly": ["quarterly"],
-               "challenger_backtests": ["challenger_backtests"]}
+               "challenger_backtests": ["challenger_backtests"], "backup": ["backup"],
+               "restore_test": ["restore_test"]}
     for key, expr in ctx.cfg.schedule.items():
         for job in mapping.get(key, []):
             scheduler.add_job(
                 run_job, CronTrigger.from_crontab(expr, timezone="UTC"), args=[ctx, job, "schedule"],
                 id=f"nightly-{job}", replace_existing=True, misfire_grace_time=3600,
             )
+    if "watchdog" in ctx.cfg.schedule:
+        scheduler.add_job(run_watchdog, CronTrigger.from_crontab(ctx.cfg.schedule["watchdog"], timezone="UTC"),
+                          args=[ctx], id="watchdog", replace_existing=True, misfire_grace_time=3600)

@@ -361,3 +361,8 @@ h3 { font-size: 15px; margin: 0; }
 .status-shadow { color: var(--accent); }
 .qual-form { display: flex; flex-direction: column; gap: 8px; padding: 8px 16px; }
 .qual-form .input { font: inherit; font-size: 13px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); width: 100%; box-sizing: border-box; }
+.login { max-width: 360px; margin: 40px auto; }
+.login-form { display: flex; flex-direction: column; gap: 10px; }
+.login-form .input { font: inherit; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); color: var(--text); }
+.logout { display: inline; margin: 0; }
+.logout .link-button { background: none; border: 0; padding: 0; font: inherit; color: var(--muted); cursor: pointer; }

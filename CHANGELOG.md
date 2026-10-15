@@ -1,5 +1,52 @@
 # Changelog
 
+## Fase 10 – Afronding (2026-10-15)
+
+### Gebouwd
+
+- **Back-up**: elke nacht om 02:00 UTC een `pg_dump` (custom format) vanuit de server naar `./backups`
+  buiten de containers, met een SHA-256-bestand en een controle door de inhoudsopgave terug te lezen.
+  Bewaard: de laatste 14 plus de eerste van elk van de laatste 12 maanden. De serverimage bevat nu
+  `pg_dump` 16 uit de PostgreSQL-pakketbron; de container maakt de back-upmap bij het starten schrijfbaar
+  en draait daarna als gewone gebruiker.
+- **Bewezen herstel**: elke zondag zet de server de nieuwste back-up terug in een lege, tijdelijke database,
+  rekent daar elke grade opnieuw uit en vergelijkt de grades met de live database. `scripts/restore.sh`
+  herstelt een back-up, ook op een nieuwe machine, en eindigt met dezelfde herberekening.
+- **Meldingen** bij een mislukte geplande run of een run met minstens 5 fouten, via een webhook (ntfy,
+  Synology Chat) en/of e-mail (SMTP), alleen in te stellen in `.env`; sleutels in URL's worden gemaskeerd.
+  Een **watchdog** controleert elk uur of een taak is blijven liggen (één melding per dag per taak). Alle
+  pogingen staan in een logtabel; testmelding vanuit de app.
+- **Geheugen en rekentijd**: elke run legt duur, rekentijd en het hoogste geheugengebruik vast (zichtbaar
+  bij de laatste runs). `cli nightly` draait alle nachtelijke taken achter elkaar; `scripts/nas-check.sh`
+  doet dat op de Synology en meet intussen het geheugen per container. Geheugenplafonds in
+  docker-compose: database 1,5 GB, server 2 GB, interface 512 MB.
+- **Inlog**: één wachtwoord (`APP_PASSWORD`), ondertekende sessiecookie van 30 dagen, pauze na tien foute
+  pogingen per kwartier, alleen lokale doorverwijzingen na inloggen, `/api` zonder sessie geeft 401.
+- **Pagina Instellingen**: kaart Beheer met laatste back-up, hersteltest, meldkanalen en laatste meldingen.
+- **Handleiding** in het Nederlands (`docs/handleiding.md`) en een bijgewerkte README.
+
+### Acceptatie
+
+- **Herstel op een schone machine geeft dezelfde grades**: een kopie van de installatie in een lege map
+  met een nieuw, leeg databasevolume; `scripts/restore.sh` met de back-up van de ontwikkeldatabase gaf
+  "771 snapshots herberekend, 771 exact gelijk, 0 afwijkend". De controlegetallen van alle grades (771),
+  terugtestgrades (62.109) en uitkomsten (135.445) waren identiek aan het origineel. In de containers van
+  die installatie slaagden daarna ook de nachtelijke back-up en de hersteltest.
+- **Volledige nachtrun binnen één uur**: alle nachtelijke taken achter elkaar met echte bronnen (zonder
+  taalmodel, want er is geen sleutel): 16,9 minuten (wisselkoersen 10 s, markten 235 s, grondstoffen 216 s,
+  aandelen 290 s, crypto 233 s, back-up 31 s), alle runs zonder fouten. Hoogste geheugengebruik van de
+  server 497 MB; rekentijd samen onder een minuut: de tijd zit vooral in de snelheidslimieten van de
+  bronnen, dus de tragere processor van de DS920+ telt weinig mee. Dit is gemeten in de ontwikkelomgeving,
+  niet op de NAS zelf: draai daar `scripts/nas-check.sh` als controle.
+
+### Gevonden en hersteld
+
+- Een melding na een mislukte run maakte het run-object onleesbaar (dezelfde databasesessie); nu een eigen
+  sessie.
+- Na inloggen verwees de interface door naar het interne adres van de container (0.0.0.0:3000); nu
+  relatief.
+- `restore.sh` wachtte op de tijdelijke server die PostgreSQL bij een lege database start; nu op de echte.
+
 ## Fase 9 – Leerlus (2026-10-15)
 
 ### Gebouwd

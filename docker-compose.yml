@@ -7,6 +7,8 @@ services:
   db:
     image: postgres:16-alpine
     restart: unless-stopped
+    # Ceilings for the DS920+ (4 GB standard): measured peaks are far below (see CHANGELOG, phase 10).
+    mem_limit: 1536m
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-graadmeter}
       POSTGRES_USER: ${POSTGRES_USER:-graadmeter}
@@ -39,6 +41,7 @@ services:
     build: ./server
     image: graadmeter-server:latest
     restart: unless-stopped
+    mem_limit: 2g                    # nightly peak about 0.5 GB; backtests need more
     depends_on:
       db:
         condition: service_healthy
@@ -46,9 +49,11 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-graadmeter}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-graadmeter}
       CONFIG_DIR: /config
+      BACKUP_DIR: /backups
       TZ: UTC
     volumes:
       - ./config:/config:ro
+      - ./backups:/backups           # nightly pg_dump, outside the containers
     expose:
       - "8000"
 
@@ -56,11 +61,14 @@ services:
     build: ./web
     image: graadmeter-web:latest
     restart: unless-stopped
+    mem_limit: 512m
     depends_on:
       server:
         condition: service_healthy
     environment:
       SERVER_URL: http://server:8000
+      APP_PASSWORD: ${APP_PASSWORD:?set APP_PASSWORD in .env}
+      SESSION_SECRET: ${SESSION_SECRET:-}
       TZ: UTC
     ports:
       - "${WEB_PORT:-3000}:3000"

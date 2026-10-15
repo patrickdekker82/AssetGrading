@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import Link from "next/link";
 import { Footer } from "@/components/Footer";
 import { GlossaryProvider } from "@/components/GlossaryProvider";
@@ -8,6 +9,7 @@ import { Nav } from "@/components/Nav";
 import { SearchBox } from "@/components/SearchBox";
 import { EMPTY_GLOSSARY, type Glossary } from "@/lib/glossary";
 import { fetchServer } from "@/lib/server";
+import { SESSION_COOKIE, validSession } from "@/lib/session";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -19,6 +21,7 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const loggedIn = validSession((await cookies()).get(SESSION_COOKIE)?.value);
   const [glossary, health] = await Promise.all([
     fetchServer<Glossary>("/api/glossary"),
     fetchServer<Health>("/api/health"),
@@ -37,6 +40,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 <SearchBox />
                 <Link href="/verbruik" className="header-link">Instellingen</Link>
                 <HealthBadge health={health} />
+                {loggedIn && (
+                  <form method="post" action="/auth/logout" className="logout">
+                    <button type="submit" className="link-button" title="Uitloggen">Uitloggen</button>
+                  </form>
+                )}
               </div>
             </div>
             <Nav />
