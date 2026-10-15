@@ -1,13 +1,73 @@
-# Synology override: use the images built on the Mac (scripts/build-images.sh) instead of building,
-# and keep the database files in a visible folder next to this file.
-#   docker compose -f docker-compose.yml -f docker-compose.nas.yml up -d
+# Graadmeter on the Synology: a complete, standalone file (no build, no override tags), because Container
+# Manager on DSM ships an older Docker Compose. Copy it to the NAS AS `docker-compose.yml`; then every command
+# and script there is plain `docker compose ...`. The images come from scripts/build-images.sh on the Mac.
+#   docker compose up -d
+name: graadmeter
+
 services:
   db:
-    volumes: !override
-      - ./data/postgres:/var/lib/postgresql/data
+    image: postgres:16-alpine
+    restart: unless-stopped
+    mem_limit: 1536m
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-graadmeter}
+      POSTGRES_USER: ${POSTGRES_USER:-graadmeter}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      TZ: UTC
+    command:
+      - postgres
+      - -c
+      - shared_buffers=512MB
+      - -c
+      - max_connections=30
+      - -c
+      - max_worker_processes=3
+      - -c
+      - max_parallel_workers=2
+      - -c
+      - max_parallel_workers_per_gather=1
+      - -c
+      - timezone=UTC
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data     # visible next to this file, included in Hyper Backup
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   server:
-    build: !reset null
+    image: graadmeter-server:latest
     pull_policy: never
+    restart: unless-stopped
+    mem_limit: 2g
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-graadmeter}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-graadmeter}
+      CONFIG_DIR: /config
+      BACKUP_DIR: /backups
+      TZ: UTC
+    volumes:
+      - ./config:/config:ro
+      - ./backups:/backups
+    expose:
+      - "8000"
+
   web:
-    build: !reset null
+    image: graadmeter-web:latest
     pull_policy: never
+    restart: unless-stopped
+    mem_limit: 512m
+    depends_on:
+      server:
+        condition: service_healthy
+    environment:
+      SERVER_URL: http://server:8000
+      APP_PASSWORD: ${APP_PASSWORD:?set APP_PASSWORD in .env}
+      SESSION_SECRET: ${SESSION_SECRET:-}
+      TZ: UTC
+    ports:
+      - "${WEB_PORT:-3000}:3000"

@@ -16,7 +16,7 @@ De app bestaat uit drie Docker-containers:
 
 De interface praat alleen met de eigen rekenserver, nooit rechtstreeks met een dataleverancier.
 
-**Voor gebruik en beheer: zie de [handleiding](docs/handleiding.md).** Deze README is de technische kant.
+**Installeren stap voor stap: zie [docs/installatie.md](docs/installatie.md). Voor gebruik en beheer: zie de [handleiding](docs/handleiding.md).** Deze README is de technische kant.
 
 ## Starten op de Mac
 
@@ -40,11 +40,12 @@ scripts/build-images.sh       # maakt dist/graadmeter-images.tar.gz (linux/amd64
 
 Op de NAS (via SSH, in een map zoals `/volume1/docker/graadmeter`):
 
-1. Kopieer `dist/graadmeter-images.tar.gz`, `docker-compose.yml`, `docker-compose.nas.yml`,
+1. Kopieer `dist/graadmeter-images.tar.gz`, `docker-compose.nas.yml` (op de NAS **als `docker-compose.yml`**),
    de map `config/`, de map `scripts/` en je `.env` naar die map.
 2. Laad de images: `docker load -i graadmeter-images.tar.gz`
 3. Controleer of de images op deze NAS werken: `scripts/nas-smoketest.sh` (alle regels moeten `OK` zijn).
-4. Start: `docker compose -f docker-compose.yml -f docker-compose.nas.yml up -d`
+4. Start: `docker compose up -d` (het NAS-bestand is compleet en werkt ook met de oudere Docker Compose van
+   Container Manager)
 5. Meet geheugen en rekentijd met een volledige nachtrun: `scripts/nas-check.sh` (moet binnen een uur klaar
    zijn; toont het hoogste geheugengebruik per container).
 
@@ -195,9 +196,8 @@ assets hij dekt. Een terugtest is herberekend, geen behaald resultaat.
   Gestopt? `backtest resume <nummer>`.
 - **IJking**: na een terugtest stelt de app per sjabloon nieuwe lettergrenzen voor (10% A, 20% B, 40% C,
   20% D, 10% F). Keur goed of af op de pagina Model. De server verandert het model nooit zelf; een
-  goedgekeurd voorstel leg je vast als nieuwe modelversie met
-  `docker compose run --rm -v ./config:/config server python -m app.cli apply-proposal <nummer>`
-  (de configuratie is in de containers alleen-lezen) en daarna `docker compose restart server`.
+  goedgekeurd voorstel leg je vast als nieuwe modelversie met `scripts/apply-proposal.sh <nummer>` (de
+  configuratie is in de draaiende containers alleen-lezen; het script schrijft hem en herstart de server).
 
 ### Leerlus: voorstellen, uitdagers en terugdraaien
 
@@ -245,7 +245,7 @@ voor het thuisnetwerk: zet poort 3000 niet open naar het internet.
   database. De uitkomst staat onder Instellingen > Beheer.
 - **Met de hand**: `scripts/backup.sh` (back-up), `docker compose exec server python -m app.cli restore-test`.
 - **Herstellen, ook op een schone machine**: `scripts/restore.sh backups/graadmeter-<tijd>.dump` (op de NAS
-  met `COMPOSE_FILES="-f docker-compose.yml -f docker-compose.nas.yml"`). Het script controleert het
+  gewoon zo, want daar heet het NAS-bestand `docker-compose.yml`). Het script controleert het
   bestand, zet de database terug, start de app en rekent alle grades opnieuw uit.
 - Kopieer `backups/` ook naar een andere plek (Hyper Backup naar een externe schijf of de cloud).
 

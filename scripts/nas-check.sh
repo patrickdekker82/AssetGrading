@@ -5,7 +5,7 @@
 #   scripts/nas-check.sh
 set -uo pipefail
 cd "$(dirname "$0")/.."
-compose="docker compose ${COMPOSE_FILES:--f docker-compose.yml -f docker-compose.nas.yml}"
+compose="docker compose ${COMPOSE_FILES:-}"
 log=$(mktemp); stats=$(mktemp)
 
 echo "Geheugen van de NAS:"; free -m | sed -n '1,2p'

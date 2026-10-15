@@ -1,5 +1,18 @@
 # Changelog
 
+## Installatiehandleiding (2026-10-15)
+
+- **`docs/installatie.md`**: van niets naar een werkende app op de DS920+, met elke opdracht om te plakken
+  (sleutels, Mac, Synology, eerste data, NAS-controle, terugtest en ijking, Hyper Backup, meldingen, updates,
+  problemen oplossen) en per open punt wat je zelf doet.
+- **`scripts/make-env.sh`** maakt `.env` door de sleutels één voor één te vragen; wachtwoorden worden gemaakt.
+  Werkt met de bash 3.2 van macOS.
+- **`docker-compose.nas.yml` is nu een compleet, zelfstandig bestand** (op de NAS als `docker-compose.yml`).
+  De override met `!reset`/`!override` vroeg om Docker Compose 2.24 en de map `server/` op de NAS; het nieuwe
+  bestand is getest met Compose 2.20 (de versie van Container Manager), inclusief starten, back-up en herstel.
+- **`scripts/apply-proposal.sh`**: het vastleggen van een goedgekeurd ijkvoorstel. De eerder beschreven
+  opdracht (`docker compose run -v ./config:/config ...`) werkte niet: de configuratie bleef alleen-lezen.
+
 ## Na de bouw – controle en verbeteringen, model 0.6.0 (2026-10-15)
 
 Een controle van alle hoofdstukken van de bouwprompt tegen de code en een doorloop van elke pagina

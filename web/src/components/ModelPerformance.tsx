@@ -300,8 +300,8 @@ function ProposalCard({ p }: { p: Proposal }) {
       )}
       {p.kind === "letter_scale" && p.status === "approved" && !p.applied_version && (
         <p className="muted small">
-          Goedgekeurd. De server past het model nooit zelf aan: leg de nieuwe modelversie vast met{" "}
-          <code>python -m app.cli apply-proposal {p.id}</code> (zie README) en herstart de server.
+          Goedgekeurd. De server past het model nooit zelf aan: leg de nieuwe modelversie op de NAS vast met{" "}
+          <code>scripts/apply-proposal.sh {p.id}</code> (zie docs/installatie.md, deel F).
         </p>
       )}
       {p.kind === "gate_candidate" && p.status === "approved" && (

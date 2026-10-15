@@ -40,6 +40,8 @@ De app:
 
 ## 2. Installeren op de Synology
 
+De volledige uitleg, met elke opdracht om te plakken, staat in [installatie.md](installatie.md). Kort:
+
 Je bouwt de app op je Mac en zet hem daarna op de NAS. Op de NAS zelf wordt niets gebouwd.
 
 **Op de Mac** (met Docker Desktop):
@@ -53,14 +55,14 @@ Dat maakt `dist/graadmeter-images.tar.gz`.
 **Op de NAS** (via SSH; zet SSH aan in DSM onder Configuratiescherm > Terminal en SNMP):
 
 1. Maak een map, bijvoorbeeld `/volume1/docker/graadmeter`.
-2. Kopieer daarheen: `dist/graadmeter-images.tar.gz`, `docker-compose.yml`, `docker-compose.nas.yml`, de
+2. Kopieer daarheen: `dist/graadmeter-images.tar.gz`, `docker-compose.nas.yml` (als `docker-compose.yml`), de
    mappen `config/` en `scripts/`, en een ingevuld `.env` (zie hoofdstuk 3).
 3. Laad de images: `docker load -i graadmeter-images.tar.gz`
 4. Controleer dat ze op deze NAS werken: `scripts/nas-smoketest.sh` (alles moet `OK` zijn).
 5. Start de app:
 
    ```bash
-   docker compose -f docker-compose.yml -f docker-compose.nas.yml up -d
+   docker compose up -d
    ```
 
 6. Open `http://<adres-van-je-nas>:3000` en log in.
@@ -172,9 +174,8 @@ Een voorstel dat een vangrail schendt wordt automatisch geweigerd. Je beslist ze
 - **Promoveren** kan alleen als alle toetsen gehaald zijn, en hoogstens één keer per 6 maanden. Vanaf dat
   moment worden grades met de nieuwe gewichten berekend.
 - **Terugdraaien** maakt de laatste promotie met één klik ongedaan.
-- Een goedgekeurd voorstel voor lettergrenzen leg je vast met
-  `docker compose run --rm -v ./config:/config server python -m app.cli apply-proposal <nummer>` en
-  daarna `docker compose restart server`.
+- Een goedgekeurd voorstel voor lettergrenzen leg je op de NAS vast met `scripts/apply-proposal.sh <nummer>`
+  (zie [installatie.md](installatie.md), deel F).
 
 ## 10. Nachtelijke taken
 
@@ -215,7 +216,7 @@ externe schijf of de cloud. Een back-up op dezelfde NAS helpt niet als de NAS st
 
 1. Installeer de app zoals in hoofdstuk 2, met dezelfde `.env`, maar start hem nog niet.
 2. Zet het back-upbestand en het `.sha256`-bestand in de map `backups`.
-3. Draai (op de NAS met `COMPOSE_FILES="-f docker-compose.yml -f docker-compose.nas.yml"` ervoor):
+3. Draai (op de NAS gewoon zo):
 
    ```bash
    scripts/restore.sh backups/graadmeter-<datum>.dump
