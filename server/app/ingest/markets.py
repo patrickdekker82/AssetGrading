@@ -97,7 +97,9 @@ def update_shiller(ctx: MarketsContext) -> None:
         return
     with ctx.sf() as session:
         recent = session.execute(text(
-            "SELECT 1 FROM provider_call_log WHERE provider = 'shiller' AND ok AND started_at > :t LIMIT 1"),
+            # Only a fetched spreadsheet counts: reading the data page alone is not a success.
+            "SELECT 1 FROM provider_call_log WHERE provider = 'shiller' AND ok AND endpoint LIKE '%ie_data%' "
+            "AND started_at > :t LIMIT 1"),
             {"t": datetime.now(UTC) - timedelta(days=SHILLER_EVERY_DAYS)}).first()
     if recent:
         return

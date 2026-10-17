@@ -88,6 +88,13 @@ def test_shiller_columns_are_found_by_header_and_months_read_right():
 def test_shiller_link_is_read_from_the_page():
     page = '<a href="https://img1.wsimg.com/blobby/go/abc/downloads/ie_data.xls?ver=1760000000">Download</a>'
     assert LINK.search(page).group(0).endswith("ie_data.xls?ver=1760000000")
+    # As on shillerdata.com in October 2026: without a scheme, in a subfolder, next to another spreadsheet.
+    real = ('<a href="//img1.wsimg.com/blobby/go/e5e/downloads/02e3/Fig3-1%20(1).xls?ver=1">Fig</a>'
+            '<a href="//img1.wsimg.com/blobby/go/e5e/downloads/1449/ie_data.xls?ver=1791297298731">Data</a>')
+    from app.providers.shiller import ShillerProvider
+
+    p = provider(ShillerProvider, lambda r: httpx.Response(200, text=real))
+    assert p.data_link() == "https://img1.wsimg.com/blobby/go/e5e/downloads/1449/ie_data.xls?ver=1791297298731"
 
 
 def test_cape_counts_from_a_month_after_the_month_and_against_own_history():
@@ -222,3 +229,20 @@ def test_report_notes_a_switched_off_source_and_errors_a_paused_one_once():
     r.unavailable(ProviderPaused("yahoo gepauzeerd"), "koersen")
     r.unavailable(ProviderPaused("yahoo gepauzeerd"), "koersen")
     assert r.errors == ["koersen: yahoo gepauzeerd"] and r.notes == ["koersen: yahoo staat uit"]
+
+
+def test_sec_block_is_waited_out_once():
+    from app.providers.sec import SEC_BLOCK_SECONDS, SecProvider
+
+    answers = [httpx.Response(403, text="<title>SEC.gov | Request Rate Threshold Exceeded</title>"),
+               httpx.Response(200, json={"0": {"cik_str": 1, "ticker": "AAA", "title": "Aaa"}})]
+    waits = []
+    s = ProviderSettings(name="sec", base_url="https://example.org", rate_limit=FAST)
+    p = SecProvider(s, MemoryRecorder(), client=httpx.Client(transport=httpx.MockTransport(lambda r: answers.pop(0))),
+                    sleep=waits.append)
+    assert p.company_tickers()[0]["ticker"] == "AAA" and SEC_BLOCK_SECONDS in waits
+    # An ordinary 403 (no block message) is not retried.
+    p2 = SecProvider(s, MemoryRecorder(), client=httpx.Client(transport=httpx.MockTransport(
+        lambda r: httpx.Response(403, text="forbidden"))), sleep=waits.append)
+    with pytest.raises(ProviderError):
+        p2.submissions(1)

@@ -204,8 +204,21 @@ def parse_company_facts(data: dict, call_id: int | None, start: date | None = No
     return out
 
 
+SEC_BLOCK_SECONDS = 610   # SEC blocks an address for ten minutes after more than 10 requests a second
+
+
+def sec_block_wait(status: int, body: bytes) -> float | None:
+    """SEC answers 403 'Request Rate Threshold Exceeded' while an address is blocked (also when another program
+    on the same network asked too much). Wait out the block once instead of losing the whole run."""
+    return SEC_BLOCK_SECONDS if status == 403 and b"Request Rate Threshold" in body else None
+
+
 class SecProvider(Provider):
     name = "sec"
+    max_attempts = 2
+
+    def block_wait(self, status: int, body: bytes) -> float | None:
+        return sec_block_wait(status, body)
     _tickers: tuple[float, list[dict]] | None = None
     TICKERS_CACHE_SECONDS = 6 * 3600
 

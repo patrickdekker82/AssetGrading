@@ -11,7 +11,8 @@ import xlrd
 
 from app.providers.base import Provider, ProviderError
 
-LINK = re.compile(r"""https?://[^"'\s<>]+?/ie_data\.xls[^"'\s<>]*""")
+# The data page links the file without a scheme ("//img1.wsimg.com/.../ie_data.xls?ver=...").
+LINK = re.compile(r"""(?:https?:)?//[^"'\s<>]+?/ie_data\.xls[^"'\s<>]*""")
 
 
 def month_end(year: int, month: int) -> date:
@@ -61,7 +62,8 @@ class ShillerProvider(Provider):
         found = LINK.search(page.data)
         if not found:
             raise ProviderError("shiller: no link to ie_data.xls on the data page")
-        return found.group(0).replace("&amp;", "&")
+        link = found.group(0).replace("&amp;", "&")
+        return "https:" + link if link.startswith("//") else link
 
     def monthly(self) -> tuple[list[tuple[date, float | None, float | None]], int | None]:
         res = self.get_bytes(self.data_link())

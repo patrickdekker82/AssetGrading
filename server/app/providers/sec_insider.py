@@ -175,6 +175,12 @@ def parse_form4(xml: str, accession: str, filed_at: datetime) -> list[InsiderFil
 
 class SecInsiderProvider(Provider):
     name = "sec_insider"
+    max_attempts = 2
+
+    def block_wait(self, status: int, body: bytes) -> float | None:
+        from app.providers.sec import sec_block_wait
+
+        return sec_block_wait(status, body)
 
     def auth_headers(self) -> dict[str, str]:
         agent = os.environ.get("SEC_USER_AGENT") or "Graadmeter private research tool admin@example.org"

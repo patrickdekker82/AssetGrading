@@ -235,6 +235,11 @@ class Provider:
     def auth_params(self) -> dict[str, str]:
         return {}
 
+    def block_wait(self, status: int, body: bytes) -> float | None:
+        """Seconds to wait when the provider answers that this address is temporarily blocked (then the call is
+        tried again), or None. Adapters override this for providers with such a rule."""
+        return None
+
     def check_budget(self, cost: int) -> None:
         budget = self.settings.monthly_budget
         if budget is None:
@@ -287,7 +292,11 @@ class Provider:
                     res = self.client.get(url, params=query, headers=self.auth_headers())
                 status, body = res.status_code, res.content
                 content_type = res.headers.get("content-type")
-                if status in RETRY_STATUS:
+                blocked = self.block_wait(status, body or b"") if status >= 400 else None
+                if blocked is not None:
+                    error = f"HTTP {status} (tijdelijk geblokkeerd, {blocked:.0f} s wachten)"
+                    retry_after = blocked
+                elif status in RETRY_STATUS:
                     error = f"HTTP {status}"
                     retry_after = _retry_after(res.headers.get("retry-after"))
                 elif status >= 400:
@@ -317,7 +326,7 @@ class Provider:
                     raise ProviderError(f"{self.name} {endpoint}: invalid JSON") from exc
                 return Response(data=data, call_id=call_id, status_code=status or 0, headers=dict(res.headers))
             last_error, last_status = error, status
-            transient = status is None or status in RETRY_STATUS
+            transient = status is None or status in RETRY_STATUS or retry_after is not None
             if not transient or attempt == self.max_attempts:
                 break
             self._sleep(retry_after if retry_after is not None else 2 ** attempt)

@@ -89,15 +89,17 @@ providers:
 
   sec:
     base_url: https://data.sec.gov
-    # SEC allows 10 requests per second and requires a User-Agent with a contact (SEC_USER_AGENT in .env).
-    rate_limit: {calls: 5, per_seconds: 1}
+    # SEC allows 10 requests per second per address and requires a User-Agent with a contact (SEC_USER_AGENT in
+    # .env). Graadmeter keeps to 5 in total (3 here, 2 for sec_insider): other programs on the same network may
+    # use SEC too, and together they must stay under 10 or the address is blocked for ten minutes.
+    rate_limit: {calls: 3, per_seconds: 1}
     monthly_budget: null
     raw_retention_days: 45       # company facts are several MB per company; re-read monthly anyway
   sec_insider:
     base_url: https://www.sec.gov
     # Form 4 insider filings: quarterly data sets (zip, 5-20 MB, history) and single filings (recent).
-    # Shares SEC's limit of 10 requests a second with `sec` (5 + 4).
-    rate_limit: {calls: 4, per_seconds: 1}
+    # Shares SEC's limit with `sec` (3 + 2 = 5 of the 10 a second allowed per address).
+    rate_limit: {calls: 2, per_seconds: 1}
     monthly_budget: null
     raw_retention_days: 30
     raw_max_bytes: 1000000       # the zips are not kept; their rows are

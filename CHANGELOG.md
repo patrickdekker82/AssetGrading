@@ -1,5 +1,18 @@
 # Changelog
 
+## Eerste installatie op de NAS (2026-10-17)
+
+- **Images worden op GitHub gebouwd** (`.github/workflows/images.yml`) en met `scripts/nas-update.sh` op de NAS
+  gezet; geen Docker op de Mac nodig. Het script maakt nu ook `data/postgres` aan (Synology maakt ontbrekende
+  mappen niet zelf).
+- **Shiller**: de link naar het bestand staat op shillerdata.com zonder `https:` ervoor; die wordt nu herkend.
+  Alleen een opgehaald bestand telt als geslaagd (eerst sloeg de app Shiller een week over als alleen de pagina
+  lukte).
+- **SEC**: samen hoogstens 5 aanvragen per seconde (was 9), omdat andere programma's op hetzelfde netwerk de SEC
+  ook gebruiken en het adres bij meer dan 10 per seconde tien minuten wordt geblokkeerd. Zo'n blokkade wacht
+  de app nu één keer uit in plaats van de aandelenrun zonder Amerikaanse bedrijven af te maken.
+- Eerste volledige run op de DS920+: 42 minuten (eis: binnen een uur), geheugen database 999 MB, server 608 MB.
+
 ## Vier gratis bronnen en Yahoo uitgewerkt (2026-10-15)
 
 ### Nieuwe bronnen (geen nieuwe modelversie: alleen nieuwe invoer, elke grade bewaart zijn invoer)
