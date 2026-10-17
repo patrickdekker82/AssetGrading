@@ -1,0 +1,6 @@
+# Only for Dockerfile.bundle (build context: the repository root). server/ and web/ have their own.
+*
+!docker-compose.nas.yml
+!.env.example
+!config
+!scripts

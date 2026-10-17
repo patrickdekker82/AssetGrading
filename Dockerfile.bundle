@@ -1,0 +1,7 @@
+# The files the Synology needs next to the images: the compose file, the configuration and the scripts.
+# Built by .github/workflows/images.yml; scripts/nas-update.sh copies them out on the NAS.
+FROM busybox:1.36.1
+COPY docker-compose.nas.yml /bundle/docker-compose.yml
+COPY .env.example /bundle/.env.example
+COPY config /bundle/config
+COPY scripts /bundle/scripts
