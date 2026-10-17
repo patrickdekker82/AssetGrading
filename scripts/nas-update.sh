@@ -35,7 +35,7 @@ newer() {  # is version $1 newer than $2? (major.minor.patch)
     for (i = 1; i <= 3; i++) { if (x[i] + 0 > y[i] + 0) exit 0; if (x[i] + 0 < y[i] + 0) exit 1 } exit 1 }'
 }
 
-mkdir -p config scripts backups data
+mkdir -p config scripts backups data/postgres   # Synology does not create missing bind-mount folders
 here=$(version_of config/model/model.yaml)
 incoming=$(version_of "$tmp/config/model/model.yaml")
 if [ -n "$here" ] && newer "$here" "$incoming"; then
